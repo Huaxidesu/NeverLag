@@ -1,0 +1,7 @@
+name: NLProbe
+main: nlprobe.NLProbe
+version: 1.0
+commands:
+  nlprobe:
+    description: 实体清理验证探针
+    usage: /nlprobe spawn <n> | /nlprobe count
