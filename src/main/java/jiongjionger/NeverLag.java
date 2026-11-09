@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import jiongjionger.cleaner.MobClearConfig;
 import jiongjionger.cleaner.MobCleaner;
@@ -60,6 +61,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.permissions.Permissible;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -409,6 +411,33 @@ implements Listener {
         }
     }
 
+    /**
+     * 排查用：把服务端「认为的在线玩家」和 {@code bukkit.broadcast.user} 的订阅者都列出来。
+     *
+     * 1.7.10 的 {@code broadcastMessage(String)} 并不是遍历 getOnlinePlayers()，而是遍历
+     * 权限订阅表（{@code CraftServer.broadcast} → {@code getPermissionSubscriptions}），
+     * 所以两者的结果可能不一致：广播能送到控制台、插件桥接等非玩家发送者，返回值也就不等于玩家数。
+     * 简报「发不出去」时先跑这个命令，就能分清是没人、还是玩家不在广播订阅表里。
+     */
+    private void dumpBroadcast(CommandSender sender) {
+        List<Player> players = new ArrayList<Player>(Bukkit.getOnlinePlayers());
+        sender.sendMessage("§b[NeverLag] §7getOnlinePlayers: §f" + players.size());
+        for (Player player : players) {
+            sender.sendMessage("§7  - §f" + player.getName() + " §7@ " + player.getWorld().getName()
+                    + "（isOnline=" + player.isOnline() + "）");
+        }
+        try {
+            Set<Permissible> subs = Bukkit.getPluginManager()
+                    .getPermissionSubscriptions("bukkit.broadcast.user");
+            sender.sendMessage("§b[NeverLag] §7bukkit.broadcast.user 订阅者: §f" + subs.size());
+            for (Permissible permissible : subs) {
+                sender.sendMessage("§7  - §f" + permissible.getClass().getName() + " §7: " + permissible);
+            }
+        } catch (Throwable t) {
+            sender.sendMessage("§c[NeverLag] 读取广播订阅表失败: " + t);
+        }
+    }
+
     public boolean onCommand(CommandSender sender, Command cmnd, String label, String[] args) {
         if (sender instanceof Player && !sender.isOp()) {
             return true;
@@ -418,6 +447,10 @@ implements Listener {
         }
         if (args.length >= 1 && ("clear".equalsIgnoreCase(args[0]) || "clean".equalsIgnoreCase(args[0]))) {
             return this.handleClear(sender, args);
+        }
+        if (args.length == 1 && "who".equalsIgnoreCase(args[0])) {
+            this.dumpBroadcast(sender);
+            return true;
         }
         CommandSender p = sender;
         if (label.equalsIgnoreCase("NeverLag")) {

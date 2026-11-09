@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import jiongjionger.NeverLag;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.LivingEntity;
@@ -42,25 +43,95 @@ public class MobCleaner {
     private final NeverLag plugin;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private int taskId = -1;
+    /** 距离下一次定时清理已经过去的秒数。 */
+    private int elapsed;
+    /** 本轮已经播报到第几个预警点（warningAt 按下标从大到小走）。 */
+    private int warned;
 
     public MobCleaner(NeverLag plugin) {
         this.plugin = plugin;
     }
 
+    /**
+     * 重新挂定时器。只用一个每秒执行的任务，预警和清理共用同一个计数器，
+     * 这样预热提醒不会和实际清理错拍（两个独立任务在卡服时可能前后错开若干秒）。
+     */
     public void reload() {
         cancel();
         if (!MobClearConfig.enabled) {
             plugin.getLogger().info("[NeverLag] 生物清理未开启（mobclear.yml 的 Enable）");
             return;
         }
-        long ticks = Math.max(5, MobClearConfig.delaySeconds) * 20L;
+        elapsed = 0;
+        warned = 0;
         taskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, new Runnable() {
             @Override
             public void run() {
-                trigger(Mode.SCHEDULED, null, null);
+                tick();
             }
-        }, ticks, ticks);
-        plugin.getLogger().info("[NeverLag] 生物清理已开启，每 " + MobClearConfig.delaySeconds + " 秒一次");
+        }, 20L, 20L);
+        StringBuilder sb = new StringBuilder();
+        sb.append("[NeverLag] 生物清理已开启，每 ").append(MobClearConfig.delaySeconds).append(" 秒一次");
+        if (MobClearConfig.warningAt.isEmpty()) {
+            sb.append("，未设置预警");
+        } else {
+            sb.append("，预警提前 ");
+            for (int i = 0; i < MobClearConfig.warningAt.size(); i++) {
+                if (i > 0) {
+                    sb.append('/');
+                }
+                sb.append(MobClearConfig.warningAt.get(i));
+            }
+            sb.append(" 秒");
+        }
+        plugin.getLogger().info(sb.toString());
+    }
+
+    private void tick() {
+        if (!plugin.isEnabled()) {
+            cancel();
+            return;
+        }
+        elapsed++;
+        // 预警：按从远到近的顺序走，服务器卡顿导致跳秒时也只会补播一条、不会漏光
+        while (warned < MobClearConfig.warningAt.size()
+                && elapsed >= MobClearConfig.delaySeconds - MobClearConfig.warningAt.get(warned).intValue()) {
+            int seconds = MobClearConfig.warningAt.get(warned).intValue();
+            warned++;
+            warn(seconds);
+        }
+        if (elapsed >= MobClearConfig.delaySeconds) {
+            elapsed = 0;
+            warned = 0;
+            trigger(Mode.SCHEDULED, null, null);
+        }
+    }
+
+    /**
+     * 到点前的倒计时提醒。和垃圾清理插件走同一条路：{@code broadcastMessage(String)} 纯文本，
+     * 一次广播全体，不经过聊天组件，也不经过指令解析，任何服务端都不会丢。
+     */
+    private void warn(int seconds) {
+        String text;
+        try {
+            text = ChatColor.translateAlternateColorCodes('&', MobClearConfig.warningMessage)
+                    .replace("%TIME%", String.valueOf(seconds));
+        } catch (Throwable t) {
+            plugin.getLogger().warning("[NeverLag] 预警文案处理失败: " + t);
+            return;
+        }
+        try {
+            int got = Bukkit.getServer().broadcastMessage(text);
+            if (MobClearConfig.debug) {
+                // 注意：broadcastMessage 的返回值是「送达的权限订阅者数」，控制台等非玩家也会计入，
+                // 不等于在线玩家数，所以两个值都打出来，避免排查时误判。
+                plugin.getLogger().info("[NeverLag] 预警已播报（剩 " + seconds + " 秒，在线玩家 "
+                        + Bukkit.getOnlinePlayers().size() + "，广播回执 " + got + "）: " + text);
+            }
+        } catch (Throwable t) {
+            // 服务端关停过程中广播可能抛异常，不影响下一轮清理
+            plugin.getLogger().warning("[NeverLag] 预警播报失败: " + t);
+        }
     }
 
     public void cancel() {

@@ -1,10 +1,27 @@
-# NeverLag 1.4.3（Minecraft 1.7.10 / GTNH 版）
+# NeverLag 1.4.4（Minecraft 1.7.10 / GTNH 版）
 
 > 本仓库是 [jiongjionger/NeverLag](https://github.com/jiongjionger/NeverLag) 的 fork。
 > **默认分支 `legacy-1.3.0` 基于测试服实际运行的 1.3.0 成品 jar 反编译还原，再叠加本仓库的修复与新功能，
 > 面向 GTNH（Minecraft 1.7.10 + Crucible）服务端。**
 > 上游 `master` 的 2.0-SNAPSHOT 重写版源码完整保留在 `master` 分支；它的 cleaner / fixer
 > 尚未接入 `onEnable()`，也没有 1.7.10 的 NMS 分支，不可直接部署。
+
+## 1.4.4：清理前倒计时预警
+
+生物清理原来只在清完之后发一条简报，玩家是「突然发现怪没了」。现在补上到点前的提醒，
+做法与服务器上的垃圾清理插件（ClearItem）完全一致：
+
+- `mobclear.yml` 新增 `WarningAt: [60, 10]` 与 `WarningMessage`，`%TIME%` 自动替换成剩余秒数；
+- 播报走 `Bukkit.broadcastMessage(String)` 纯文本——和垃圾清理一字不差的调用，不经过聊天组件，
+  1.7.10 上必定送达，也不会因为悬浮文字解析失败把整条消息一起丢掉；
+- 预警与清理合并到同一个每秒任务里：共用一个计数器，卡服跳秒时只会补播一条，不会出现
+  「预警和实际清理差十几秒」；
+- 预警点自动规整：非正数、重复值、不小于 `Delay` 的值都会丢掉，把 `Delay` 调小不必回头改列表；
+- `WarningAt: []` 即关闭预警；清理完成简报仍由 `Broadcast` 单独控制。
+
+另附排查命令 `/neverlag who`（OP 或控制台）：列出 `getOnlinePlayers()` 与
+`bukkit.broadcast.user` 订阅者。1.7.10 的 `broadcastMessage` 走的是权限订阅表而不是在线玩家列表，
+两个数对不上时，这条命令能立刻分清是「真没人」还是「玩家不在订阅表里」。
 
 ## 1.4.3：改用和垃圾清理同一条播报通道
 

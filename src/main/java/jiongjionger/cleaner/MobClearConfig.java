@@ -4,7 +4,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -23,6 +25,10 @@ public final class MobClearConfig {
 
     public static boolean enabled = true;
     public static int delaySeconds = 1800;
+    /** 清理前的预警秒数，已去重并按从大到小排好；空表示不预警。 */
+    public static final List<Integer> warningAt = new ArrayList<Integer>();
+    /** 预警文案，%TIME% 替换成剩余秒数。 */
+    public static String warningMessage = "&b[NeverLag] &a生物清理将在 &e%TIME% &a秒后开始，请及时离开刷怪场";
     public static boolean cleanHostile = true;
     public static boolean cleanFriendly = true;
     public static boolean cleanNeutral = true;
@@ -72,6 +78,8 @@ public final class MobClearConfig {
         FileConfiguration cfg = YamlConfiguration.loadConfiguration(file);
         enabled = cfg.getBoolean("Enable", true);
         delaySeconds = Math.max(5, cfg.getInt("Delay", 1800));
+        warningMessage = cfg.getString("WarningMessage", warningMessage);
+        loadWarnings(cfg.getIntegerList("WarningAt"));
         cleanHostile = cfg.getBoolean("Clean.Hostile", true);
         cleanFriendly = cfg.getBoolean("Clean.Friendly", true);
         cleanNeutral = cfg.getBoolean("Clean.Neutral", true);
@@ -93,6 +101,26 @@ public final class MobClearConfig {
         if (boss.isEmpty()) {
             fill(boss, DEFAULT_BOSS);
         }
+    }
+
+    /**
+     * 读取并规整预警时间点：丢掉非正数与不小于 Delay 的值，去重后从大到小排序。
+     * 把 Delay 调小时，配置里过大的预警点自动失效，不必回头改列表。
+     */
+    private static void loadWarnings(List<Integer> values) {
+        warningAt.clear();
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        Set<Integer> unique = new HashSet<Integer>();
+        for (Integer value : values) {
+            if (value == null || value.intValue() <= 0 || value.intValue() >= delaySeconds) {
+                continue;
+            }
+            unique.add(value);
+        }
+        warningAt.addAll(unique);
+        Collections.sort(warningAt, Collections.reverseOrder());
     }
 
     private static void fill(Set<String> target, List<String> values) {
