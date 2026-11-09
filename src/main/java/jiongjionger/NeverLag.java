@@ -15,8 +15,13 @@ import com.comphenix.protocol.reflect.StructureModifier;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
+import jiongjionger.cleaner.MobClearConfig;
+import jiongjionger.cleaner.MobCleaner;
+import jiongjionger.cleaner.MobNames;
 import jiongjionger.common.MonitorInfoBean;
 import jiongjionger.common.MonitorServiceImpl;
 import jiongjionger.listener.AntiBigShop;
@@ -146,6 +151,7 @@ implements Listener {
     public static String m_spam;
     public static String m_anti_bigshop;
     public static String m_anti_crashsign;
+    private MobCleaner mobCleaner;
 
     static {
         m_redstone = "";
@@ -161,6 +167,9 @@ implements Listener {
 
     public void onEnable() {
         this.LoadConfig();
+        MobNames.load(this);
+        this.mobCleaner = new MobCleaner(this);
+        this.mobCleaner.reload();
         Bukkit.getPluginManager().registerEvents((Listener)this, (Plugin)this);
         intversion = Integer.parseInt(Bukkit.getServer().getBukkitVersion().split("-")[0].replace(".", ""));
         if (IsAntiBot.booleanValue()) {
@@ -184,8 +193,10 @@ implements Listener {
         if (IsNoSpawnChunk.booleanValue()) {
             new NoSpawnChunk(this);
         }
-        if (ClearEntity.booleanValue()) {
+        if (ClearEntity.booleanValue() && !MobClearConfig.enabled) {
             new ClearEntity(this);
+        } else if (ClearEntity.booleanValue()) {
+            this.getLogger().info("[NeverLag] 已启用新的生物清理（mobclear.yml），旧的 ClearEntity 定时任务不再注册");
         }
         if (ClearItem.booleanValue()) {
             new ClearItem(this);
@@ -388,6 +399,7 @@ implements Listener {
         m_spam = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("ChatCommandRate.Message"));
         m_anti_bigshop = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("FixQuickShop.Message"));
         m_anti_crashsign = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("AntiCrashSign.Message"));
+        MobClearConfig.load(this);
     }
 
     @EventHandler
@@ -398,17 +410,23 @@ implements Listener {
     }
 
     public boolean onCommand(CommandSender sender, Command cmnd, String label, String[] args) {
-        if (!(sender instanceof Player)) {
+        if (sender instanceof Player && !sender.isOp()) {
             return true;
         }
-        Player p = (Player)sender;
-        if (!p.isOp()) {
-            return true;
+        if (!"NeverLag".equalsIgnoreCase(cmnd.getName())) {
+            return false;
         }
+        if (args.length >= 1 && ("clear".equalsIgnoreCase(args[0]) || "clean".equalsIgnoreCase(args[0]))) {
+            return this.handleClear(sender, args);
+        }
+        CommandSender p = sender;
         if (label.equalsIgnoreCase("NeverLag")) {
             if (args.length == 1) {
                 if (args[0].equalsIgnoreCase("reload")) {
                     this.LoadConfig();
+                    if (this.mobCleaner != null) {
+                        this.mobCleaner.reload();
+                    }
                     p.sendMessage(ChatColor.GREEN + "[NeverLag]\u914d\u7f6e\u6587\u4ef6\u91cd\u8f7d\u5b8c\u6bd5");
                 }
                 if (args[0].equalsIgnoreCase("gc")) {
@@ -482,6 +500,68 @@ implements Listener {
             }
         }
         return true;
+    }
+
+    /**
+     * /neverlag clear &lt;all|now|实体ID&gt;
+     */
+    private boolean handleClear(CommandSender sender, String[] args) {
+        if (this.mobCleaner == null) {
+            sender.sendMessage(ChatColor.RED + "[NeverLag] 生物清理模块未初始化");
+            return true;
+        }
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.AQUA + "[NeverLag] " + ChatColor.WHITE + "/neverlag clear <all|now|实体ID>");
+            sender.sendMessage(ChatColor.GRAY + "  all    清理敌对、友好、中立全部生物");
+            sender.sendMessage(ChatColor.GRAY + "  now    按 mobclear.yml 的类别立即清理一次并播报");
+            sender.sendMessage(ChatColor.GRAY + "  实体ID 只清理该种生物，如 zombie、Thaumcraft.Wisp、僵尸");
+            return true;
+        }
+        String arg = args[1];
+        if ("all".equalsIgnoreCase(arg)) {
+            this.mobCleaner.trigger(MobCleaner.Mode.ALL, null, sender);
+        } else if ("now".equalsIgnoreCase(arg)) {
+            this.mobCleaner.trigger(MobCleaner.Mode.NOW, null, sender);
+        } else {
+            this.mobCleaner.trigger(MobCleaner.Mode.KEY, arg, sender);
+        }
+        return true;
+    }
+
+    public List<String> onTabComplete(CommandSender sender, Command cmnd, String alias, String[] args) {
+        if (sender instanceof Player && !sender.isOp()) {
+            return Collections.emptyList();
+        }
+        if (args.length == 1) {
+            return filterPrefix(Arrays.asList("clear", "reload", "gc", "show", "find"), args[0]);
+        }
+        if (args.length == 2 && ("clear".equalsIgnoreCase(args[0]) || "clean".equalsIgnoreCase(args[0]))) {
+            List<String> options = new ArrayList<String>();
+            options.add("all");
+            options.add("now");
+            String prefix = args[1].toLowerCase();
+            for (String key : MobNames.keys()) {
+                if (key.toLowerCase().startsWith(prefix)) {
+                    options.add(key);
+                    if (options.size() >= 60) {
+                        break;
+                    }
+                }
+            }
+            return options;
+        }
+        return Collections.emptyList();
+    }
+
+    private static List<String> filterPrefix(List<String> options, String prefix) {
+        List<String> out = new ArrayList<String>();
+        String lower = prefix == null ? "" : prefix.toLowerCase();
+        for (String option : options) {
+            if (option.toLowerCase().startsWith(lower)) {
+                out.add(option);
+            }
+        }
+        return out;
     }
 
     public static Method getMethod(Class<?> cl, String method) {

@@ -8,7 +8,7 @@ JAVAC="${JAVAC:-D:/Library/DevelopmentKit/Java/Zulu/zulu8/bin/javac.exe}"
 JAR="${JAR:-D:/Library/DevelopmentKit/Java/Zulu/zulu8/bin/jar.exe}"
 CRUCIBLE="${CRUCIBLE:-$SERVER_DIR/Crucible.jar}"
 PROTOCOLLIB="${PROTOCOLLIB:-$SERVER_DIR/plugins/ProtocolLib.jar}"
-VERSION="1.3.1"
+VERSION="1.4.0"
 OUT="build"
 
 for f in "$JAVAC" "$JAR" "$CRUCIBLE" "$PROTOCOLLIB"; do

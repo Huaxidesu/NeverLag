@@ -1,0 +1,57 @@
+# NeverLag 生物清理配置（1.4.0 新增）
+#
+# 与 config.yml 的 ClearEntity 互不影响：本文件 Enable 为 true 时，
+# 旧的 ClearEntity 定时任务会自动停用，避免同一批生物被清两次。
+# 改完执行 /neverlag reload 即可生效，不必重启。
+
+# 是否开启定时清理
+Enable: true
+
+# 清理间隔（秒）
+Delay: 1800
+
+# 定时清理的类别。手动 /neverlag clear all 不受这里限制，三个类别全清。
+Clean:
+  # 敌对：所有 IMob（含 Mod 生物）；Boss 与命名牌命名的生物一律保留
+  Hostile: true
+  # 友好：动物、鱿鱼、蝙蝠、村民；命名牌命名的保留
+  Friendly: false
+  # 中立：铁傀儡、雪傀儡等既不是怪物也不是动物的 EntityCreature；命名牌命名的保留
+  Neutral: false
+
+# 每 tick 最多移除多少只（分批删除，避免一次卡死主线程）
+BatchSize: 200
+
+# 每 tick 最多占用多少毫秒
+TimeBudgetMs: 4
+
+# 额外归类，填 EntityList 的实体键（如 Thaumcraft.Wisp、TwilightForest.Hydra）
+# 用于把某个 Mod 生物从默认类别里挪出来
+ExtraHostile: []
+ExtraFriendly: []
+ExtraNeutral: []
+
+# 永不清理的实体（默认保住村民，避免清掉村民交易所）
+Exclude:
+  - Villager
+
+# 除 IBossDisplayData 之外还要当作 Boss 保护（很多 Mod Boss 没有实现那个接口）
+Boss:
+  - TwilightForest.Hydra
+  - TwilightForest.UrGhast
+  - TwilightForest.Naga
+  - TwilightForest.Lich
+  - TwilightForest.SnowQueen
+  - TwilightForest.Minoshroom
+  - TwilightForest.KnightPhantom
+  - DraconicEvolution.ChaosGuardian
+  - DraconicEvolution.EnderDragon
+
+# 清理完成后是否全服播报
+Broadcast: true
+
+# 调试：把发给客户端的简报 JSON 打进控制台（排查悬浮文字显示问题时用）
+Debug: false
+
+# 播报文案，%COUNT% 会被替换成清理总数；支持 & 颜色代码
+Message: '&b[NeverLag] &a本次清理了 &c%COUNT% &a只生物'
