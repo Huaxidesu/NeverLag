@@ -452,6 +452,14 @@ implements Listener {
             this.dumpBroadcast(sender);
             return true;
         }
+        if (args.length == 1 && ("bosses".equalsIgnoreCase(args[0]) || "boss".equalsIgnoreCase(args[0]))) {
+            if (this.mobCleaner == null) {
+                sender.sendMessage("§c[NeverLag] 生物清理模块未初始化");
+            } else {
+                this.mobCleaner.dumpBosses(sender);
+            }
+            return true;
+        }
         CommandSender p = sender;
         if (label.equalsIgnoreCase("NeverLag")) {
             if (args.length == 1) {

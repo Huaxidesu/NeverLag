@@ -51,17 +51,71 @@ ExtraNeutral: []
 # 画、展示框、拴绳结、掉落物、经验球不属于生物，永远不会被这个功能碰到。
 Exclude: []
 
-# 除 IBossDisplayData 之外还要当作 Boss 保护（很多 Mod Boss 没有实现那个接口）
+# 额外保护名单。Boss 有三条自动判定（下面这个列表只是补充，不写也认）：
+#   1. 实现 IBossDisplayData —— 1.7.10 的头顶血条只认这个接口，屏幕上方有血条的一定命中
+#   2. 实现 IEntityMultiPart —— 末影龙、九头蛇、娜迦、混沌守卫这类多部位实体
+#   3. 类名（含父类）里带 Boss —— 由 ProtectBossNamed 控制
+# 这里写实体键（Thaumcraft.EldritchWarden）或类名（EntityEldritchWarden）都能命中。
+# 下面这份名单是扫描整合包全部 229 个模组后整理出来的，按模组分组。
 Boss:
-  - TwilightForest.Hydra
-  - TwilightForest.UrGhast
-  - TwilightForest.Naga
-  - TwilightForest.Lich
-  - TwilightForest.SnowQueen
-  - TwilightForest.Minoshroom
-  - TwilightForest.KnightPhantom
-  - DraconicEvolution.ChaosGuardian
-  - DraconicEvolution.EnderDragon
+  # 暮色森林：五个有血条的大 Boss + 三个无血条的小 Boss
+  - EntityTFHydra
+  - EntityTFUrGhast
+  - EntityTFNaga
+  - EntityTFLich
+  - EntityTFSnowQueen
+  - EntityTFMinoshroom
+  - EntityTFKnightPhantom
+  - EntityTFAlphaYeti
+  # 神秘时代： eldritch 守卫/傀儡、邪术师首领与传送门、巨型腐化触手
+  - EntityEldritchWarden
+  - EntityEldritchGolem
+  - EntityCultistLeader
+  - EntityCultistPortal
+  - EntityTaintacleGiant
+  - EntityThaumcraftBoss
+  # 植物魔法：盖亚守护者（I / II 都是这个类）
+  - EntityDoppleganger
+  # 龙之研究：混沌守卫（混沌龙）、自定义龙
+  - EntityChaosGuardian
+  - EntityCustomDragon
+  # 星系：月球骷髅王、火星苦力怕王
+  - EntitySkeletonBoss
+  - EntityCreeperBoss
+  # 星空（GalaxySpace）：烈焰王、水晶王、恶魂王、史莱姆王、狼王
+  - EntityBlazeBoss
+  - EntityCrystalBoss
+  - EntityGhastBoss
+  - EntitySlimeBoss
+  - EntityWolfBoss
+  # 末地扩展（HEE）：末影龙、末影恶魔、末影之眼、烈焰恶魔
+  - EntityBossDragon
+  - EntityBossEnderDemon
+  - EntityMiniBossEnderEye
+  - EntityMiniBossFireFiend
+  # 匠魂：蓝色史莱姆王
+  - KingBlueSlime
+  # 巫术：芭芭雅嘎、死神、哥布林、鹿角猎手、伦纳德、莉莉丝、痛苦领主、倒影
+  - EntityBabaYaga
+  - EntityDeath
+  - EntityGoblinGulg
+  - EntityGoblinMog
+  - EntityHornedHuntsman
+  - EntityLeonard
+  - EntityLilith
+  - EntityLordOfTorment
+  - EntityReflection
+  # 阿蒙拉：木乃伊王
+  - EntityMummyBoss
+  # 未来科技（Et Futurum）：1.9 复活龙
+  - EntityRespawnedDragon
+  # 原版
+  - EntityWither
+  - EntityDragon
+
+# 类名（含父类）里带 Boss 的一律当 Boss 保护。
+# 关掉它只影响「名字里有 Boss 但没实现血条接口」的模组生物，上面名单与接口判定仍然生效。
+ProtectBossNamed: true
 
 # 清理完成后是否全服播报
 Broadcast: true
@@ -69,11 +123,11 @@ Broadcast: true
 # 调试：把发给客户端的简报 JSON 打进控制台（排查悬浮文字不显示时用）
 Debug: false
 
-# 敌对生物带名字也照清。
-# SpecialMobs 这类模组会给怪物自动起名（如「疾病缠身的 僵尸」），
-# 不开这个的话它们会被当成「命名牌生物」永远留下。
-# 想连玩家命名的僵尸也留着，就改成 false；友好/中立生物的命名始终保留。
-ClearNamedHostile: true
+# 敌对生物带名字是否也照清。默认 false：**任何**带名字的生物都保留。
+# 注意 SpecialMobs 这类模组会给怪物自动起名（如「疾病缠身的 僵尸」），
+# 开了这个才会把它们当普通怪清掉；但玩家用命名牌命名的僵尸也会一起被清，
+# 所以默认关闭。确实想让自动起名的怪物被清，再改成 true。
+ClearNamedHostile: false
 
 # 播报文案，%COUNT% 会被替换成清理总数；支持 & 颜色代码
 # 鼠标悬浮在播报上可看「中文名: 数量」明细

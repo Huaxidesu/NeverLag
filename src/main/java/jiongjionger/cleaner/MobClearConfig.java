@@ -36,8 +36,10 @@ public final class MobClearConfig {
     public static int timeBudgetMs = 4;
     public static boolean broadcast = true;
     public static boolean debug = false;
-    /** 敌对生物即使带自定义名也清掉（SpecialMobs 等模组会给怪物自动起名）。 */
-    public static boolean clearNamedHostile = true;
+    /** 敌对生物即使带自定义名也清掉（默认关：任何命名的生物都保留）。 */
+    public static boolean clearNamedHostile = false;
+    /** 类名里带 Boss 的实体一律当 Boss 保护（防没实现血条接口的模组 Boss 被误清）。 */
+    public static boolean protectBossNamed = true;
     public static String message = "&b[NeverLag]&a本次清理了 &c%COUNT% &a只生物";
     /** 命名牌生物的保留说明，%NAMED% 为数量；置空则不播报。 */
     public static String namedMessage = "&7（命名的 &f%NAMED% &7只太硬，卡牙，这次没吃）";
@@ -52,16 +54,39 @@ public final class MobClearConfig {
     public static final Set<String> exclude = new HashSet<String>();
     public static final Set<String> boss = new HashSet<String>();
 
+    /**
+     * 整合包（GTNH 2.9.x，229 个模组）里全部 Boss 的类名，扫描 jar 整理而成。
+     * 有血条的 Boss 靠 IBossDisplayData 就能自动认出来，这份名单主要兜住两类：
+     * 没实现血条接口的（暮色小 Boss、混沌守卫以外的龙）和以后换版本判不出来的。
+     */
     private static final List<String> DEFAULT_BOSS = Arrays.asList(
-            "TwilightForest.Hydra",
-            "TwilightForest.UrGhast",
-            "TwilightForest.Naga",
-            "TwilightForest.Lich",
-            "TwilightForest.SnowQueen",
-            "TwilightForest.Minoshroom",
-            "TwilightForest.KnightPhantom",
-            "DraconicEvolution.ChaosGuardian",
-            "DraconicEvolution.EnderDragon");
+            // 暮色森林
+            "EntityTFHydra", "EntityTFUrGhast", "EntityTFNaga", "EntityTFLich", "EntityTFSnowQueen",
+            "EntityTFMinoshroom", "EntityTFKnightPhantom", "EntityTFAlphaYeti",
+            // 神秘时代
+            "EntityEldritchWarden", "EntityEldritchGolem", "EntityCultistLeader",
+            "EntityCultistPortal", "EntityTaintacleGiant", "EntityThaumcraftBoss",
+            // 植物魔法
+            "EntityDoppleganger",
+            // 龙之研究
+            "EntityChaosGuardian", "EntityCustomDragon",
+            // 星系
+            "EntitySkeletonBoss", "EntityCreeperBoss",
+            // 星空
+            "EntityBlazeBoss", "EntityCrystalBoss", "EntityGhastBoss", "EntitySlimeBoss", "EntityWolfBoss",
+            // 末地扩展
+            "EntityBossDragon", "EntityBossEnderDemon", "EntityMiniBossEnderEye", "EntityMiniBossFireFiend",
+            // 匠魂
+            "KingBlueSlime",
+            // 巫术
+            "EntityBabaYaga", "EntityDeath", "EntityGoblinGulg", "EntityGoblinMog", "EntityHornedHuntsman",
+            "EntityLeonard", "EntityLilith", "EntityLordOfTorment", "EntityReflection",
+            // 阿蒙拉
+            "EntityMummyBoss",
+            // 未来科技
+            "EntityRespawnedDragon",
+            // 原版
+            "EntityWither", "EntityDragon");
 
     private MobClearConfig() {
     }
@@ -87,7 +112,8 @@ public final class MobClearConfig {
         timeBudgetMs = Math.max(1, cfg.getInt("TimeBudgetMs", 4));
         broadcast = cfg.getBoolean("Broadcast", true);
         debug = cfg.getBoolean("Debug", false);
-        clearNamedHostile = cfg.getBoolean("ClearNamedHostile", true);
+        clearNamedHostile = cfg.getBoolean("ClearNamedHostile", false);
+        protectBossNamed = cfg.getBoolean("ProtectBossNamed", true);
         message = cfg.getString("Message", message);
         namedMessage = cfg.getString("NamedMessage", namedMessage);
         tamedMessage = cfg.getString("TamedMessage", tamedMessage);
@@ -149,6 +175,21 @@ public final class MobClearConfig {
             default:
                 return false;
         }
+    }
+
+    /**
+     * 「Boss」配置项是否命中这个实体。除了实体键（TwilightForest.Hydra），
+     * 也认完整类名和简单类名（EntityTFHydra），这样不依赖模组怎么注册实体也能写死保护。
+     */
+    public static boolean isConfiguredBoss(String entityKey, Object nmsHandle) {
+        if (contains(boss, entityKey)) {
+            return true;
+        }
+        if (nmsHandle == null) {
+            return false;
+        }
+        Class<?> clazz = nmsHandle.getClass();
+        return contains(boss, clazz.getName()) || contains(boss, clazz.getSimpleName());
     }
 
     public static boolean contains(Set<String> keys, String entityKey) {

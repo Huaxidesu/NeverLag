@@ -1,6 +1,8 @@
 package jiongjionger.cleaner;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -134,6 +136,105 @@ public class MobCleaner {
         }
     }
 
+    /**
+     * 排查用：把世界里现有的生物按类汇总，标出哪些会被当作 Boss 保护。
+     *
+     * 用法是「先看一眼再清」：模组加了新 Boss、或者怀疑某只怪被判错，跑一次就能对上，
+     * 不用等清理完才发现少了东西。★ 表示会被保护，· 表示会被当成普通生物处理。
+     */
+    public void dumpBosses(CommandSender sender) {
+        final Map<String, BossStat> stats = new HashMap<String, BossStat>();
+        int total = 0;
+        int bossTotal = 0;
+        for (World world : Bukkit.getWorlds()) {
+            try {
+                for (LivingEntity entity : world.getLivingEntities()) {
+                    try {
+                        if (entity instanceof Player || entity.isDead() || !entity.isValid()) {
+                            continue;
+                        }
+                        if (entity instanceof org.bukkit.entity.Hanging) {
+                            continue;
+                        }
+                        total++;
+                        Object handle = NmsAccess.handle(entity);
+                        String key = NmsAccess.entityKey(entity);
+                        if (key == null) {
+                            key = entity.getType().getName();
+                        }
+                        boolean isBoss = MobClearConfig.isConfiguredBoss(key, handle) || MobType.isBoss(handle);
+                        if (isBoss) {
+                            bossTotal++;
+                        }
+                        String name = handle != null ? handle.getClass().getSimpleName() : entity.getType().getName();
+                        BossStat stat = stats.get(name);
+                        if (stat == null) {
+                            stat = new BossStat(name, key, isBoss);
+                            stat.maxHealth = entity.getMaxHealth();
+                            stat.type = MobType.classify(entity);
+                            stats.put(name, stat);
+                        }
+                        stat.count++;
+                        if (entity.getCustomName() != null && entity.getCustomName().trim().length() > 0) {
+                            stat.named++;
+                        }
+                    } catch (Throwable ignored) {
+                    }
+                }
+            } catch (Throwable t) {
+                sender.sendMessage("§c[NeverLag] 读取世界 " + world.getName() + " 实体失败: " + t);
+            }
+        }
+        List<BossStat> list = new ArrayList<BossStat>(stats.values());
+        Collections.sort(list, new Comparator<BossStat>() {
+            @Override
+            public int compare(BossStat a, BossStat b) {
+                if (a.boss != b.boss) {
+                    return a.boss ? -1 : 1;
+                }
+                return b.count - a.count;
+            }
+        });
+        sender.sendMessage("§b[NeverLag] §7世界生物 §f" + total + " §7只，§f" + list.size() + " §7类，"
+                + "其中 Boss 级 §f" + bossTotal + " §7只");
+        sender.sendMessage("§7★ = 会被保护（Boss），· = 按普通生物处理");
+        int shown = 0;
+        for (BossStat stat : list) {
+            if (shown >= 80) {
+                sender.sendMessage("§7……还有 " + (list.size() - shown) + " 类未列出");
+                break;
+            }
+            shown++;
+            String typeLabel = stat.type == null ? "不参与清理" : stat.type.label();
+            sender.sendMessage((stat.boss ? "§6★ " : "§8· ") + "§f" + stat.count + " × " + stat.name
+                    + " §7[" + stat.key + "] §7血量 " + trim(stat.maxHealth)
+                    + " §7" + typeLabel + (stat.named > 0 ? "，其中命名 " + stat.named : ""));
+        }
+    }
+
+    private static String trim(double value) {
+        if (value == Math.floor(value) && !Double.isInfinite(value)) {
+            return String.valueOf((long) value);
+        }
+        return String.valueOf(value);
+    }
+
+    private static final class BossStat {
+        final String name;
+        final String key;
+        final boolean boss;
+        int count;
+        int named;
+        double maxHealth;
+        MobType type;
+
+        BossStat(String name, String key, boolean boss) {
+            this.name = name;
+            this.key = key;
+            this.boss = boss;
+        }
+    }
+
     public void cancel() {
         if (taskId != -1) {
             Bukkit.getScheduler().cancelTask(taskId);
@@ -232,7 +333,8 @@ public class MobCleaner {
                 if (key == null) {
                     key = entity.getType().getName();
                 }
-                if (MobClearConfig.contains(MobClearConfig.boss, key) || MobType.isBoss(entity)) {
+                Object handle = NmsAccess.handle(entity);
+                if (MobClearConfig.isConfiguredBoss(key, handle) || MobType.isBoss(handle)) {
                     boss++;
                     continue; // Boss 先判，避免带自定义名的 Boss 被算进「命名牌保留」
                 }

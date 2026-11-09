@@ -58,6 +58,13 @@ public final class NmsAccess {
         return isA(nmsEntity.getClass(), className, 0);
     }
 
+    /**
+     * 直接按类判断，省掉一次 getHandle。
+     */
+    public static boolean isA(Class<?> clazz, String className) {
+        return isA(clazz, className, 0);
+    }
+
     private static boolean isA(Class<?> clazz, String className, int depth) {
         if (clazz == null || depth > 32) {
             return false;

@@ -1,10 +1,45 @@
-# NeverLag 1.4.4（Minecraft 1.7.10 / GTNH 版）
+# NeverLag 1.4.5（Minecraft 1.7.10 / GTNH 版）
 
 > 本仓库是 [jiongjionger/NeverLag](https://github.com/jiongjionger/NeverLag) 的 fork。
 > **默认分支 `legacy-1.3.0` 基于测试服实际运行的 1.3.0 成品 jar 反编译还原，再叠加本仓库的修复与新功能，
 > 面向 GTNH（Minecraft 1.7.10 + Crucible）服务端。**
 > 上游 `master` 的 2.0-SNAPSHOT 重写版源码完整保留在 `master` 分支；它的 cleaner / fixer
 > 尚未接入 `onEnable()`，也没有 1.7.10 的 NMS 分支，不可直接部署。
+
+## 1.4.5：Boss 判定补全，命名生物一律保留
+
+### Boss 判定从一条规则变成三条
+
+原来只认 `IBossDisplayData`（1.7.10 头顶血条对应的接口）。扫完整合包 229 个模组后发现
+这个接口其实覆盖得不错——**屏幕上能看到血条的 Boss 全都实现了它**，包括混沌守卫
+（继承 `EntityDragon`）、盖亚守护者（`IBotaniaBoss` 继承自它）、神秘时代
+（`EntityThaumcraftBoss` 一族）、星系与星空的八个、末地扩展四个、巫术九个、阿蒙拉木乃伊王。
+
+真正会漏的是**没有血条的小 Boss**（暮色森林的米诺菇、幻影骑士、雪怪首领）和以后新增的模组，
+所以加了两条兜底：
+
+1. `IEntityMultiPart`——末影龙、九头蛇、娜迦、雪女王、混沌守卫这类多部位实体；
+2. 类名（含父类）里带 `Boss`——由新开关 `ProtectBossNamed`（默认 `true`）控制。
+
+`Boss` 名单同时支持**实体键**（`TwilightForest.Hydra`）和**类名**（`EntityTFHydra`），
+默认名单按模组分组列全了整合包里 42 个 Boss 类（36 个实现了血条接口，另 6 个是无血条小 Boss 与基类）。
+
+### 任何带名字的生物都不再清理
+
+`ClearNamedHostile` 默认改为 **`false`**。此前为了清掉 SpecialMobs 自动起名的变异怪，
+这个开关默认是开的，代价是玩家用命名牌命名的僵尸、骷髅也会一起被清。现在统一保守：
+**只要 `CustomName` 非空就保留**，不分敌友、不分来源。想恢复旧行为再改回 `true`。
+
+### 新增 `/neverlag bosses`
+
+按类汇总世界里的生物，标出哪些会被保护，用于上线前核对：
+
+```
+[NeverLag] 世界生物 7 只，3 类，其中 Boss 级 5 只
+★ = 会被保护（Boss），· = 按普通生物处理
+★ 5 × EntityTFHydra [TwilightForest.Hydra] 血量 398 不参与清理，其中命名 5
+· 1 × EntityZombie [Zombie] 血量 22 敌对，其中命名 1
+```
 
 ## 1.4.4：清理前倒计时预警
 
@@ -82,10 +117,10 @@
 画、展示框、拴绳结、掉落物、经验球不是 `LivingEntity`，`getLivingEntities()` 根本不会返回，
 代码里另有一道 `Hanging` 判断兜底——**装饰物不会被这个功能碰到**。
 
-**命名与敌对生物**：SpecialMobs 这类模组会给怪物自动起名（如「疾病缠身的 僵尸」），
-如果一律按命名保留，大量变异怪会永久留下。因此 `ClearNamedHostile` 默认为 `true`：
-**敌对生物带名字也照清**，友好/中立生物的命名始终保留。想让玩家命名的僵尸也留下，
-把它改成 `false`。
+**命名与敌对生物**：`ClearNamedHostile` 默认为 `false`，即**任何带名字的生物都保留**，
+不管名字来自命名牌还是模组自动生成。SpecialMobs 这类模组会给怪物自动起名
+（如「疾病缠身的 僵尸」），这些变异怪因此不会被清掉——这是刻意选择的保守行为：
+宁可少清，也不能误伤玩家养的东西。确实想让它们被清，再把它改成 `true`。
 
 判定优先用 NMS 基类/接口，所以 Mod 生物不需要单独适配。运行时拿不到 NMS 句柄时退回 Bukkit 接口。
 
@@ -184,7 +219,7 @@ Boss:                   # IBossDisplayData 之外还要保护的 Boss
   - ...
 Broadcast: true
 Debug: false            # 把简报 JSON 打进控制台
-ClearNamedHostile: true # 敌对生物带名字也清；改成 false 则命名僵尸也保留
+ClearNamedHostile: false # 任何带名字的生物都保留（命名牌 / 模组自动起名）
 Message: '&b[NeverLag] &a本次清理了 &c%COUNT% &a只生物'
 NamedMessage: '&7（命名的 &f%NAMED% &7只太硬，卡牙，这次没吃）'
 TamedMessage: '&7（&f%TAMED% &7只驯服宠物，下不去口）'
@@ -256,7 +291,7 @@ python tools/gen_mobnames.py \
 | 场景 | 结果 |
 |---|---|
 | 混合实体 `clear all` | 22 个活体实体中清掉 15 只：敌对 7（火焰僵尸 2、僵尸 2、瘟疫僵尸 1、巨大僵尸 1、野蛮僵尸 1）、友好 8（牛 3、村民 3、羊 2），耗时 126 ms |
-| 命名牌生物 | 命名牛 `NameCow`、命名羊保留；命名僵尸 `PlayerPet` 按 `ClearNamedHostile: true` 被清 |
+| 命名牌生物 | 命名牛 `NameCow`、命名羊、命名僵尸 `PlayerPet` 全部保留（`ClearNamedHostile: false`） |
 | Boss | 5 只暮色九头蛇全部保留，播报「5 只 Boss，打不过」 |
 | 画 / 展示框 | `summon Painting`、`summon ItemFrame` 生成后不受影响（非 LivingEntity，扫描列表里根本没有） |
 | 村民 | `Exclude: []` 下正常清理，3 只全清 |

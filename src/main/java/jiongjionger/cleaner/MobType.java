@@ -1,5 +1,7 @@
 package jiongjionger.cleaner;
 
+import java.util.Locale;
+
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Bat;
 import org.bukkit.entity.Golem;
@@ -40,8 +42,43 @@ public enum MobType {
     }
 
     public static boolean isBoss(LivingEntity entity) {
-        Object handle = NmsAccess.handle(entity);
-        return NmsAccess.isA(handle, "net.minecraft.entity.boss.IBossDisplayData");
+        return isBoss(NmsAccess.handle(entity));
+    }
+
+    /**
+     * Boss 判定，三条独立规则，命中任意一条即保护：
+     *
+     * <ol>
+     *   <li>{@code IBossDisplayData}——1.7.10 的头顶血条只认这个接口，屏幕上方有血条的一定命中；</li>
+     *   <li>{@code IEntityMultiPart}——末影龙、九头蛇、娜迦、混沌守卫这类多部位实体，全是 Boss 级；</li>
+     *   <li>类名（含父类）里带 {@code Boss}——覆盖没实现血条接口、名字却明摆着是 Boss 的模组生物。</li>
+     * </ol>
+     *
+     * 第三条可以用 {@code ProtectBossNamed} 关掉，前两条是硬判定。
+     */
+    public static boolean isBoss(Object handle) {
+        if (handle == null) {
+            return false;
+        }
+        Class<?> clazz = handle.getClass();
+        if (NmsAccess.isA(clazz, "net.minecraft.entity.boss.IBossDisplayData")) {
+            return true;
+        }
+        if (NmsAccess.isA(clazz, "net.minecraft.entity.IEntityMultiPart")) {
+            return true;
+        }
+        return MobClearConfig.protectBossNamed && hasBossInName(clazz, 0);
+    }
+
+    private static boolean hasBossInName(Class<?> clazz, int depth) {
+        if (clazz == null || depth > 24) {
+            return false;
+        }
+        String simple = clazz.getSimpleName();
+        if (simple != null && simple.toLowerCase(Locale.ROOT).contains("boss")) {
+            return true;
+        }
+        return hasBossInName(clazz.getSuperclass(), depth + 1);
     }
 
     /**
@@ -50,7 +87,7 @@ public enum MobType {
     public static MobType classify(LivingEntity entity) {
         Object handle = NmsAccess.handle(entity);
         if (handle != null) {
-            if (NmsAccess.isA(handle, "net.minecraft.entity.boss.IBossDisplayData")) {
+            if (isBoss(handle)) {
                 return null;
             }
             if (NmsAccess.isA(handle, "net.minecraft.entity.monster.IMob")) {
