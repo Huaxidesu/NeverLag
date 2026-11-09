@@ -1,4 +1,4 @@
-# NeverLag 1.4.2（Minecraft 1.7.10 / GTNH 版）
+# NeverLag 1.4.3（Minecraft 1.7.10 / GTNH 版）
 
 > 本仓库是 [jiongjionger/NeverLag](https://github.com/jiongjionger/NeverLag) 的 fork。
 > **默认分支 `legacy-1.3.0` 基于测试服实际运行的 1.3.0 成品 jar 反编译还原，再叠加本仓库的修复与新功能，
@@ -6,22 +6,37 @@
 > 上游 `master` 的 2.0-SNAPSHOT 重写版源码完整保留在 `master` 分支；它的 cleaner / fixer
 > 尚未接入 `onEnable()`，也没有 1.7.10 的 NMS 分支，不可直接部署。
 
-## 1.4.2：修复游戏内不播报
+## 1.4.3：改用和垃圾清理同一条播报通道
+
+原版插件的垃圾清理播报用的是 `Bukkit.broadcastMessage(String)`——**纯字符串**，一次广播全体，
+1.7.10 完全支持。生物清理的简报要带悬停明细（`hoverEvent`），必须是聊天组件，
+而 **1.7.10 的 Bukkit 没有 `broadcast(BaseComponent)`**（该方法 1.8 才加入），
+所以没法用一行调用把组件发给所有人。
+
+1.4.2 因此退而求其次走了 `/tellraw`，这属于绕路：多经过一层指令解析，还踩了 `@a` 的坑。
+
+1.4.3 换回和 `broadcastMessage` **同一层的通道**：
+
+- 主路径 `player.spigot().sendMessage(BaseComponent[])`——直接把组件塞进聊天包发给玩家，
+  底层就是 `playerConnection.sendPacket`，和 `broadcastMessage` 发的是同一个包，
+  区别只是内容为组件而非字符串。1.7.10 缺的只是「一次发全体」的组件接口，所以仍需遍历玩家；
+- 次选 `/tellraw <玩家名> <json>`，仅在服务端没有 `Player#spigot()` 时启用；
+- **兜底 `Bukkit.broadcastMessage(纯文本)`**——和垃圾清理一字不差的调用，
+  组件通道整体不可用时至少保证有一行播报，不再出现「什么都没收到」；
+- 控制台日志区分通道：`[NeverLag] 简报播报：N 名玩家（组件直发 x，tellraw y）`。
+
+## 1.4.2：修复游戏内不播报（已被 1.4.3 取代）
 
 1.4.0 / 1.4.1 里简报只写进了控制台，玩家聊天框什么都看不到。原因是 **1.7.10 的 `/tellraw`
   只接受单个玩家名，不认 `@a`**——`tellraw @a <json>` 会报「无法找到该玩家」，而指令系统
-   仍然返回「已执行」，所以连纯文本兜底都不会触发。
+  仍然返回「已执行」，所以连纯文本兜底都不会触发。
 
-现在的做法：
-
-- 取在线玩家列表，**逐个玩家**发 `tellraw <玩家名> <json>`；
-- 发送前先用服务端自己的 `ChatSerializer` 验一遍 JSON，解析失败就直接改发纯文本，
-  保证「至少有一行播报」；
-- 单个玩家发送异常时，只把这一名玩家降级成纯文本，不影响其他人；
-- 控制台日志新增 `[NeverLag] 简报播报：N 名玩家`，一眼能看出播报到没到人。
+做法：取在线玩家列表逐个发 `tellraw <玩家名> <json>`；发送前先用服务端自己的 `ChatSerializer`
+验一遍 JSON，解析失败就直接改发纯文本；单个玩家发送异常时只降级该玩家；
+控制台日志新增 `[NeverLag] 简报播报：N 名玩家`。
 
 诊断建议：`mobclear.yml` 里 `Debug: true` 会额外打出简报 JSON、`Broadcast` 关闭提示和
-「没有玩家在线」提示。
+「没有玩家在线」提示，以及最终走的是哪条通道。
 
 ## 1.4.1：默认「除 Boss 和命名过的，全清」
 

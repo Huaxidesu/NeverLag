@@ -1,26 +1,30 @@
 package jiongjionger.cleaner;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import net.md_5.bungee.api.chat.BaseComponent;
+import net.md_5.bungee.chat.ComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 /**
- * 清理简报：游戏内用 tellraw 发 JSON（鼠标悬浮看每种生物的中文名与数量），控制台发纯文本。
+ * 清理简报：游戏内发聊天组件（鼠标悬浮看每种生物的中文名与数量），控制台发纯文本。
  *
- * 走 /tellraw 而不是自己拼数据包，是为了不碰各服务端实现不一样的数据包类名；
- * tellraw 在 1.7.10 就支持 hoverEvent，JSON 由服务端自己解析。
- *
- * 注意：1.7.10 的 tellraw 只认单个玩家名，写 {@code @a} 会报「无法找到该玩家」
- * （而且指令系统仍然返回成功，不会触发纯文本兜底），所以这里逐个玩家单独发。
+ * 发送分三级，按可靠性从高到低：
+ * <ol>
+ *   <li>{@code player.spigot().sendMessage(BaseComponent[])}：直接构造聊天包发给玩家，
+ *       和 {@code Bukkit.broadcastMessage} 走的是同一条底层路径，只是内容为组件而非纯文本。
+ *       {@code Server.broadcast(BaseComponent)} 是 1.8 才有的接口，1.7.10 只能逐个玩家发。</li>
+ *   <li>{@code /tellraw <玩家名> <json>}：组件通道不可用时的退路。1.7.10 的 tellraw 只认单个玩家名，
+ *       写 {@code @a} 会报「无法找到该玩家」，而指令系统仍返回成功，所以不能靠返回值判断。</li>
+ *   <li>{@code Bukkit.broadcastMessage(纯文本)}：原生插件的垃圾清理就用这个方法，
+ *       一次广播全体，但字符串带不了 hover，只能作最后兜底。</li>
+ * </ol>
  */
 public final class ChatReport {
 
@@ -59,63 +63,92 @@ public final class ChatReport {
             }
             return;
         }
-        if (!jsonParsable(plugin, json)) {
-            // JSON 本身有问题就别浪费一轮 tellraw，直接退回纯文本
-            for (Player player : players) {
-                player.sendMessage(plain);
-            }
+
+        BaseComponent[] components = parse(plugin, json);
+        if (components == null) {
+            plainBroadcast(plugin, plain);
             return;
         }
+
         int sent = 0;
         int failed = 0;
+        int viaSpigot = 0;
+        int viaTellraw = 0;
         for (Player player : players) {
-            if (tellraw(player, json)) {
+            int path = sendComponent(player, components, json);
+            if (path >= 0) {
                 sent++;
+                if (path == 0) {
+                    viaSpigot++;
+                } else {
+                    viaTellraw++;
+                }
             } else {
                 failed++;
-                player.sendMessage(plain);
+                sendPlain(player, plain);
             }
         }
-        plugin.getLogger().info("[NeverLag] 简报播报：" + sent + " 名玩家"
+        if (sent == 0) {
+            // 组件一条都没发出去，说明这条路在这个服务端不可用，退回原生插件的广播方式
+            plainBroadcast(plugin, plain);
+            return;
+        }
+        plugin.getLogger().info("[NeverLag] 简报播报：" + sent + " 名玩家（组件直发 " + viaSpigot
+                + "，tellraw " + viaTellraw + "）"
                 + (failed > 0 ? "，" + failed + " 名退回纯文本" : ""));
     }
 
     /**
-     * 1.7.10 的 tellraw 只接受单个玩家名，必须逐个发；指令出错时 Bukkit 仍可能返回 true，
-     * 所以这里只把抛异常当作失败。
+     * JSON 转组件树。失败就说明这条路走不通，交给调用方退纯文本。
      */
-    private static boolean tellraw(Player player, String json) {
+    private static BaseComponent[] parse(Plugin plugin, String json) {
         try {
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "tellraw " + player.getName() + " " + json);
-            return true;
+            return ComponentSerializer.parse(json);
         } catch (Throwable t) {
-            return false;
+            plugin.getLogger().warning("[NeverLag] 简报 JSON 解析失败，改用纯文本播报: " + t);
+            return null;
         }
     }
 
     /**
-     * 用服务端自己的解析器（net.minecraft.util.ChatSerializer）验一遍 JSON。
-     * 类名对不上、反射不可用时一律放行，不因为校验不了就不播报。
+     * 直接把组件构造进聊天包发给玩家，不经过指令解析，也不经过 JSON 往返。
+     * 失败时退回 tellraw（1.7.10 只认单个玩家名）。
+     *
+     * @return 0 = 组件直发，1 = tellraw，-1 = 两条路都不行
      */
-    private static boolean jsonParsable(Plugin plugin, String json) {
+    private static int sendComponent(Player player, BaseComponent[] components, String json) {
         try {
-            Class<?> serializer = Class.forName("net.minecraft.util.ChatSerializer");
-            for (Method method : serializer.getMethods()) {
-                Class<?>[] params = method.getParameterTypes();
-                if (!Modifier.isStatic(method.getModifiers()) || params.length != 1
-                        || params[0] != String.class || method.getReturnType() == void.class) {
-                    continue;
-                }
-                method.setAccessible(true);
-                method.invoke(null, json);
-                return true;
-            }
-            return true;
-        } catch (InvocationTargetException e) {
-            plugin.getLogger().warning("[NeverLag] 简报 JSON 解析失败，改发纯文本: " + e.getCause());
-            return false;
+            player.spigot().sendMessage(components);
+            return 0;
+        } catch (Throwable ignored) {
+            // 服务端没实现 Player#spigot() 或组件通道异常，试下一条路
+        }
+        try {
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "tellraw " + player.getName() + " " + json);
+            return 1;
+        } catch (Throwable ignored) {
+            return -1;
+        }
+    }
+
+    private static void sendPlain(Player player, String plain) {
+        try {
+            player.sendMessage(plain);
+        } catch (Throwable ignored) {
+            // 玩家刚好退出，忽略
+        }
+    }
+
+    /**
+     * 和原生插件的垃圾清理播报完全一致的一条路：一次广播全体纯文本。
+     * 抛异常只会发生在服务端关停过程中，吞掉即可。
+     */
+    private static void plainBroadcast(Plugin plugin, String plain) {
+        try {
+            int got = Bukkit.broadcastMessage(plain);
+            plugin.getLogger().info("[NeverLag] 简报播报：" + got + " 名玩家（纯文本兜底）");
         } catch (Throwable t) {
-            return true;
+            plugin.getLogger().warning("[NeverLag] 纯文本播报也失败了: " + t);
         }
     }
 
