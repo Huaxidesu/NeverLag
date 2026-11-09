@@ -221,10 +221,10 @@ Boss:                   # IBossDisplayData 之外还要保护的 Boss
 Broadcast: true
 Debug: false            # 把简报 JSON 打进控制台
 ClearNamedHostile: false # 任何带名字的生物都保留（命名牌 / 模组自动起名）
-Message: '&b[NeverLag] &a本次清理了 &c%COUNT% &a只生物'
-NamedMessage: '&7（命名的 &f%NAMED% &7只太硬，卡牙，这次没吃）'
-TamedMessage: '&7（&f%TAMED% &7只驯服宠物，下不去口）'
-BossMessage: '&7（&f%BOSS% &7只 Boss，打不过）'
+Message: '&3&l[肥猫的大胃袋] &a本次共吃掉了 &e%COUNT% &a只生物&7'
+NamedMessage: '&7（&f%NAMED% &7只挂着名字牌，大胃袋不吃熟客）'
+TamedMessage: '&7（&f%TAMED% &7只是驯服的宠物，大胃袋下不去口）'
+BossMessage: '&7（&f%BOSS% &7只 Boss 太硬，大胃袋啃不动）'
 ```
 
 改完执行 `/neverlag reload` 生效，不用重启。

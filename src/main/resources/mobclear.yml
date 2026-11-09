@@ -18,8 +18,9 @@ WarningAt:
   - 60
   - 10
 
-# 提醒文案，%TIME% 会被替换成剩余秒数
-WarningMessage: '&b[NeverLag] &a生物清理将在 &e%TIME% &a秒后开始，请及时离开刷怪场'
+# 提醒文案，%TIME% 会被替换成剩余秒数。
+# 文案风格与 ClearItem 的「肥猫的大胃袋」保持一致：以「开饭」「吃掉」代替「清理」。
+WarningMessage: '&c[肥猫的大胃袋] &6大胃袋将会在 &e%TIME%秒 &6后开饭，刷怪场里的怪物请及时离开!'
 
 # 定时清理的类别。默认三类全清，只保留 Boss、命名牌生物、驯服宠物。
 # 手动 /neverlag clear all 同样三类全清，不受这里的开关限制。
@@ -129,11 +130,11 @@ Debug: false
 # 所以默认关闭。确实想让自动起名的怪物被清，再改成 true。
 ClearNamedHostile: false
 
-# 播报文案，%COUNT% 会被替换成清理总数；支持 & 颜色代码
+# 播报文案，%COUNT% 会被替换成吃掉的总数；支持 & 颜色代码
 # 鼠标悬浮在播报上可看「中文名: 数量」明细
-Message: '&b[NeverLag] &a本次清理了 &c%COUNT% &a只生物'
+Message: '&3&l[肥猫的大胃袋] &a本次共吃掉了 &e%COUNT% &a只生物&7'
 
 # 没吃的那部分，附在播报末尾，数量为 0 时不显示；置空字符串可关掉对应提示
-NamedMessage: '&7（命名的 &f%NAMED% &7只太硬，卡牙，这次没吃）'
-TamedMessage: '&7（&f%TAMED% &7只驯服宠物，下不去口）'
-BossMessage: '&7（&f%BOSS% &7只 Boss，打不过）'
+NamedMessage: '&7（&f%NAMED% &7只挂着名字牌，大胃袋不吃熟客）'
+TamedMessage: '&7（&f%TAMED% &7只是驯服的宠物，大胃袋下不去口）'
+BossMessage: '&7（&f%BOSS% &7只 Boss 太硬，大胃袋啃不动）'
