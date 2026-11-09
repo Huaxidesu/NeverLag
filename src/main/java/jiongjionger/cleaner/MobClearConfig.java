@@ -24,13 +24,21 @@ public final class MobClearConfig {
     public static boolean enabled = true;
     public static int delaySeconds = 1800;
     public static boolean cleanHostile = true;
-    public static boolean cleanFriendly = false;
-    public static boolean cleanNeutral = false;
+    public static boolean cleanFriendly = true;
+    public static boolean cleanNeutral = true;
     public static int batchSize = 200;
     public static int timeBudgetMs = 4;
     public static boolean broadcast = true;
     public static boolean debug = false;
+    /** 敌对生物即使带自定义名也清掉（SpecialMobs 等模组会给怪物自动起名）。 */
+    public static boolean clearNamedHostile = true;
     public static String message = "&b[NeverLag]&a本次清理了 &c%COUNT% &a只生物";
+    /** 命名牌生物的保留说明，%NAMED% 为数量；置空则不播报。 */
+    public static String namedMessage = "&7（命名的 &f%NAMED% &7只太硬，卡牙，这次没吃）";
+    /** 驯服宠物的保留说明，%TAMED% 为数量。 */
+    public static String tamedMessage = "&7（&f%TAMED% &7只驯服宠物，下不去口）";
+    /** Boss 的保留说明，%BOSS% 为数量。 */
+    public static String bossMessage = "&7（&f%BOSS% &7只 Boss，打不过）";
 
     public static final Set<String> extraHostile = new HashSet<String>();
     public static final Set<String> extraFriendly = new HashSet<String>();
@@ -65,13 +73,17 @@ public final class MobClearConfig {
         enabled = cfg.getBoolean("Enable", true);
         delaySeconds = Math.max(5, cfg.getInt("Delay", 1800));
         cleanHostile = cfg.getBoolean("Clean.Hostile", true);
-        cleanFriendly = cfg.getBoolean("Clean.Friendly", false);
-        cleanNeutral = cfg.getBoolean("Clean.Neutral", false);
+        cleanFriendly = cfg.getBoolean("Clean.Friendly", true);
+        cleanNeutral = cfg.getBoolean("Clean.Neutral", true);
         batchSize = Math.max(10, cfg.getInt("BatchSize", 200));
         timeBudgetMs = Math.max(1, cfg.getInt("TimeBudgetMs", 4));
         broadcast = cfg.getBoolean("Broadcast", true);
         debug = cfg.getBoolean("Debug", false);
+        clearNamedHostile = cfg.getBoolean("ClearNamedHostile", true);
         message = cfg.getString("Message", message);
+        namedMessage = cfg.getString("NamedMessage", namedMessage);
+        tamedMessage = cfg.getString("TamedMessage", tamedMessage);
+        bossMessage = cfg.getString("BossMessage", bossMessage);
 
         fill(extraHostile, cfg.getStringList("ExtraHostile"));
         fill(extraFriendly, cfg.getStringList("ExtraFriendly"));

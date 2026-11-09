@@ -1,25 +1,28 @@
-# NeverLag 生物清理配置（1.4.0 新增）
+# NeverLag 生物清理配置（1.4.0 起启用）
 #
-# 与 config.yml 的 ClearEntity 互不影响：本文件 Enable 为 true 时，
-# 旧的 ClearEntity 定时任务会自动停用，避免同一批生物被清两次。
+# 与 config.yml 的 ClearEntity 段互不影响：本文件 Enable 为 true 时，
+# 旧的 ClearEntity 定时任务自动停用，避免同一批生物被清两次。
 # 改完执行 /neverlag reload 即可生效，不必重启。
 
 # 是否开启定时清理
 Enable: true
 
-# 清理间隔（秒）
+# 清理间隔（秒）。到点就清，没有数量阈值。
+# 1800 秒 = 半小时；想更勤快就调小，最小 5 秒。
 Delay: 1800
 
-# 定时清理的类别。手动 /neverlag clear all 不受这里限制，三个类别全清。
+# 定时清理的类别。默认三类全清，只保留 Boss、命名牌生物、驯服宠物。
+# 手动 /neverlag clear all 同样三类全清，不受这里的开关限制。
 Clean:
-  # 敌对：所有 IMob（含 Mod 生物）；Boss 与命名牌命名的生物一律保留
+  # 敌对：所有 IMob（含 Mod 生物）
   Hostile: true
-  # 友好：动物、鱿鱼、蝙蝠、村民；命名牌命名的保留
-  Friendly: false
-  # 中立：铁傀儡、雪傀儡等既不是怪物也不是动物的 EntityCreature；命名牌命名的保留
-  Neutral: false
+  # 友好：动物、鱿鱼、蝙蝠、村民
+  Friendly: true
+  # 中立：铁傀儡、雪傀儡等既不是怪物也不是动物的 EntityCreature
+  Neutral: true
 
 # 每 tick 最多移除多少只（分批删除，避免一次卡死主线程）
+# 上万只生物时可以调大，配合 TimeBudgetMs 一起看
 BatchSize: 200
 
 # 每 tick 最多占用多少毫秒
@@ -31,9 +34,12 @@ ExtraHostile: []
 ExtraFriendly: []
 ExtraNeutral: []
 
-# 永不清理的实体（默认保住村民，避免清掉村民交易所）
-Exclude:
-  - Villager
+# 永不清理的实体，默认不排除任何生物（村民、铁傀儡都会被清）。
+# 想保住某类生物就往这里加键，例如：
+#   - Villager            村民
+#   - Thaumcraft.Golem    神秘傀儡（玩家自动化常用，默认不排除）
+# 画、展示框、拴绳结、掉落物、经验球不属于生物，永远不会被这个功能碰到。
+Exclude: []
 
 # 除 IBossDisplayData 之外还要当作 Boss 保护（很多 Mod Boss 没有实现那个接口）
 Boss:
@@ -50,8 +56,20 @@ Boss:
 # 清理完成后是否全服播报
 Broadcast: true
 
-# 调试：把发给客户端的简报 JSON 打进控制台（排查悬浮文字显示问题时用）
+# 调试：把发给客户端的简报 JSON 打进控制台（排查悬浮文字不显示时用）
 Debug: false
 
+# 敌对生物带名字也照清。
+# SpecialMobs 这类模组会给怪物自动起名（如「疾病缠身的 僵尸」），
+# 不开这个的话它们会被当成「命名牌生物」永远留下。
+# 想连玩家命名的僵尸也留着，就改成 false；友好/中立生物的命名始终保留。
+ClearNamedHostile: true
+
 # 播报文案，%COUNT% 会被替换成清理总数；支持 & 颜色代码
+# 鼠标悬浮在播报上可看「中文名: 数量」明细
 Message: '&b[NeverLag] &a本次清理了 &c%COUNT% &a只生物'
+
+# 没吃的那部分，附在播报末尾，数量为 0 时不显示；置空字符串可关掉对应提示
+NamedMessage: '&7（命名的 &f%NAMED% &7只太硬，卡牙，这次没吃）'
+TamedMessage: '&7（&f%TAMED% &7只驯服宠物，下不去口）'
+BossMessage: '&7（&f%BOSS% &7只 Boss，打不过）'

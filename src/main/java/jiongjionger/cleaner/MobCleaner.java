@@ -103,20 +103,20 @@ public class MobCleaner {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, new Runnable() {
             @Override
             public void run() {
-                List<Candidate> candidates;
+                ScanResult result;
                 try {
-                    candidates = classify(snapshot, mode, filter);
+                    result = classify(snapshot, mode, filter);
                 } catch (Throwable t) {
                     running.set(false);
                     plugin.getLogger().severe("[NeverLag] 清理扫描失败: " + t);
                     t.printStackTrace();
                     return;
                 }
-                final List<Candidate> result = candidates;
+                final ScanResult scan = result;
                 Bukkit.getScheduler().runTask(plugin, new Runnable() {
                     @Override
                     public void run() {
-                        removeBatched(result, mode, start, sender);
+                        removeBatched(scan, mode, start, sender);
                     }
                 });
             }
@@ -124,34 +124,66 @@ public class MobCleaner {
         return true;
     }
 
-    private List<Candidate> classify(List<LivingEntity> snapshot, Mode mode, String filter) {
+    /**
+     * 异步扫描的结果：待清理列表 + 保留统计（命名牌、驯服宠物、Boss）。
+     */
+    private static final class ScanResult {
+
+        final List<Candidate> candidates;
+        final int named;
+        final int tamed;
+        final int boss;
+
+        ScanResult(List<Candidate> candidates, int named, int tamed, int boss) {
+            this.candidates = candidates;
+            this.named = named;
+            this.tamed = tamed;
+            this.boss = boss;
+        }
+    }
+
+    private ScanResult classify(List<LivingEntity> snapshot, Mode mode, String filter) {
         List<Candidate> out = new ArrayList<Candidate>(Math.min(snapshot.size(), 4096));
+        int named = 0;
+        int tamed = 0;
+        int boss = 0;
         for (LivingEntity entity : snapshot) {
             try {
                 if (entity == null || entity instanceof Player || entity.isDead() || !entity.isValid()) {
                     continue;
                 }
-                String custom = entity.getCustomName();
-                if (custom != null && custom.trim().length() > 0) {
-                    continue; // 命名牌命名的一律保留
-                }
-                if (entity instanceof Tameable && ((Tameable) entity).isTamed()) {
-                    continue; // 驯服的宠物/马
+                // 画、展示框、拴绳结这类装饰物不是 LivingEntity，正常进不到这里；
+                // 留着这道闸，防止哪天换了取实体的方式把装饰物一起扫进来。
+                if (entity instanceof org.bukkit.entity.Hanging) {
+                    continue;
                 }
                 String key = NmsAccess.entityKey(entity);
                 if (key == null) {
                     key = entity.getType().getName();
                 }
-                if (MobClearConfig.contains(MobClearConfig.exclude, key)) {
-                    continue;
+                if (MobClearConfig.contains(MobClearConfig.boss, key) || MobType.isBoss(entity)) {
+                    boss++;
+                    continue; // Boss 先判，避免带自定义名的 Boss 被算进「命名牌保留」
                 }
-                if (MobClearConfig.contains(MobClearConfig.boss, key)) {
+                MobType type = resolveType(entity, key);
+                String custom = entity.getCustomName();
+                if (custom != null && custom.trim().length() > 0) {
+                    // SpecialMobs 这类模组会给怪物自动起名，敌对生物可以按配置忽略名字照清
+                    if (!(type == MobType.HOSTILE && MobClearConfig.clearNamedHostile)) {
+                        named++;
+                        continue; // 命名牌命名的一律保留
+                    }
+                }
+                if (entity instanceof Tameable && ((Tameable) entity).isTamed()) {
+                    tamed++;
+                    continue; // 驯服的宠物/马
+                }
+                if (MobClearConfig.contains(MobClearConfig.exclude, key)) {
                     continue;
                 }
                 if (mode == Mode.KEY && !matches(entity, key, filter)) {
                     continue;
                 }
-                MobType type = resolveType(entity, key);
                 if (type == null || !allowed(mode, type)) {
                     continue;
                 }
@@ -160,7 +192,7 @@ public class MobCleaner {
                 // 单个实体判定失败不影响整轮清理
             }
         }
-        return out;
+        return new ScanResult(out, named, tamed, boss);
     }
 
     private MobType resolveType(LivingEntity entity, String key) {
@@ -209,25 +241,41 @@ public class MobCleaner {
         return text.toLowerCase(Locale.ROOT).replace('_', '.').replace(" ", "");
     }
 
-    private void removeBatched(List<Candidate> list, final Mode mode, final long start, final CommandSender sender) {
-        if (list.isEmpty()) {
+    private void removeBatched(ScanResult scan, final Mode mode, final long start, final CommandSender sender) {
+        if (scan.candidates.isEmpty()) {
             running.set(false);
-            String msg = "§7[NeverLag] 没有符合条件的生物需要清理";
+            String msg = "§7[NeverLag] 没有符合条件的生物需要清理" + keepSummary(scan);
             if (sender != null) {
                 sender.sendMessage(msg);
             }
-            plugin.getLogger().info("[NeverLag] 清理结束：没有符合条件的生物");
+            plugin.getLogger().info("[NeverLag] 清理结束：没有符合条件的生物" + keepSummary(scan));
             return;
         }
-        new RemovalTask(list, mode, start, sender).start();
+        new RemovalTask(scan, mode, start, sender).start();
     }
 
-    private void finish(Map<MobType, Map<String, Integer>> counts, int total, Mode mode, long start, CommandSender sender) {
+    private static String keepSummary(ScanResult scan) {
+        StringBuilder sb = new StringBuilder();
+        if (scan.named > 0) {
+            sb.append("，命名牌保留 ").append(scan.named).append(" 只");
+        }
+        if (scan.tamed > 0) {
+            sb.append("，驯服宠物保留 ").append(scan.tamed).append(" 只");
+        }
+        if (scan.boss > 0) {
+            sb.append("，Boss 保留 ").append(scan.boss).append(" 只");
+        }
+        return sb.toString();
+    }
+
+    private void finish(Map<MobType, Map<String, Integer>> counts, int total, Mode mode, long start,
+            CommandSender sender, ScanResult scan) {
         running.set(false);
         long elapsed = System.currentTimeMillis() - start;
-        plugin.getLogger().info("[NeverLag] 清理完成：" + total + " 只，耗时 " + elapsed + " 毫秒");
+        plugin.getLogger().info("[NeverLag] 清理完成：" + total + " 只，耗时 " + elapsed + " 毫秒"
+                + keepSummary(scan));
         if (total > 0) {
-            ChatReport.broadcast(plugin, counts, total, elapsed);
+            ChatReport.broadcast(plugin, counts, total, elapsed, scan.named, scan.tamed, scan.boss);
         }
         if (sender != null) {
             sender.sendMessage("§a[NeverLag] 清理完成，共 " + total + " 只，耗时 " + elapsed + " 毫秒");
@@ -261,7 +309,7 @@ public class MobCleaner {
      */
     private final class RemovalTask implements Runnable {
 
-        private final List<Candidate> list;
+        private final ScanResult scan;
         private final Mode mode;
         private final long start;
         private final CommandSender sender;
@@ -270,8 +318,8 @@ public class MobCleaner {
         private int removed;
         private int taskId = -1;
 
-        RemovalTask(List<Candidate> list, Mode mode, long start, CommandSender sender) {
-            this.list = list;
+        RemovalTask(ScanResult scan, Mode mode, long start, CommandSender sender) {
+            this.scan = scan;
             this.mode = mode;
             this.start = start;
             this.sender = sender;
@@ -290,6 +338,7 @@ public class MobCleaner {
             }
             long deadline = System.nanoTime() + MobClearConfig.timeBudgetMs * 1000000L;
             int doneThisTick = 0;
+            List<Candidate> list = scan.candidates;
             while (index < list.size() && doneThisTick < MobClearConfig.batchSize && System.nanoTime() < deadline) {
                 Candidate candidate = list.get(index++);
                 doneThisTick++;
@@ -311,7 +360,7 @@ public class MobCleaner {
                 return;
             }
             Bukkit.getScheduler().cancelTask(taskId);
-            finish(counts, removed, mode, start, sender);
+            finish(counts, removed, mode, start, sender, scan);
         }
     }
 }

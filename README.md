@@ -1,4 +1,4 @@
-# NeverLag 1.4.0（Minecraft 1.7.10 / GTNH 版）
+# NeverLag 1.4.1（Minecraft 1.7.10 / GTNH 版）
 
 > 本仓库是 [jiongjionger/NeverLag](https://github.com/jiongjionger/NeverLag) 的 fork。
 > **默认分支 `legacy-1.3.0` 基于测试服实际运行的 1.3.0 成品 jar 反编译还原，再叠加本仓库的修复与新功能，
@@ -6,10 +6,10 @@
 > 上游 `master` 的 2.0-SNAPSHOT 重写版源码完整保留在 `master` 分支；它的 cleaner / fixer
 > 尚未接入 `onEnable()`，也没有 1.7.10 的 NMS 分支，不可直接部署。
 
-## 1.4.0 新增：生物清理
+## 1.4.1：默认「除 Boss 和命名过的，全清」
 
-独立于旧 `ClearEntity` 的一套清理系统，配置放在 `plugins/NeverLag/mobclear.yml`，
-旧 `config.yml` 不改动（Bukkit 1.7.10 保存 YAML 会丢注释，覆盖旧配置代价太大）。
+面向牲畜、水生生物动辄上万只的服务器。定时清理不给数量阈值，到点就按类别清一遍，
+默认三类全开；只有 Boss、命名牌生物、驯服宠物会被留下，并在播报里说明「为什么没吃」。
 
 ### 清理什么
 
@@ -19,14 +19,24 @@
 | 友好 | `EntityAnimal`、`EntityWaterMob`、`EntityAmbientCreature`、村民 | 牛、猪、鸡、羊、鱿鱼、蝙蝠、村民 |
 | 中立 | 其余 `EntityCreature`（`EntityGolem` 等） | 铁傀儡、雪傀儡、既非怪物也非动物的 Mod 生物 |
 
+`mobclear.yml` 里 `Clean.Hostile / Friendly / Neutral` 默认全为 `true`，
+`Exclude` 默认为空——**村民、铁傀儡也会被清**。要保住某类生物就往 `Exclude` 里加实体键。
+
 以下对象**永远不清理**：
 
 - 实现了 `net.minecraft.entity.boss.IBossDisplayData` 的 Boss（末影龙、凋灵、暮色九头蛇等）；
 - `mobclear.yml` 的 `Boss` 列表里额外登记的 Mod Boss；
 - **被命名牌命名过的生物**（`CustomName` 非空）；
 - 已驯服的宠物/马（`Tameable#isTamed`）；
-- 带 `NPC` / `MyPet` 元数据的实体；
-- `Exclude` 列表里的实体（默认保住村民）。
+- 带 `NPC` / `MyPet` 元数据的实体。
+
+画、展示框、拴绳结、掉落物、经验球不是 `LivingEntity`，`getLivingEntities()` 根本不会返回，
+代码里另有一道 `Hanging` 判断兜底——**装饰物不会被这个功能碰到**。
+
+**命名与敌对生物**：SpecialMobs 这类模组会给怪物自动起名（如「疾病缠身的 僵尸」），
+如果一律按命名保留，大量变异怪会永久留下。因此 `ClearNamedHostile` 默认为 `true`：
+**敌对生物带名字也照清**，友好/中立生物的命名始终保留。想让玩家命名的僵尸也留下，
+把它改成 `false`。
 
 判定优先用 NMS 基类/接口，所以 Mod 生物不需要单独适配。运行时拿不到 NMS 句柄时退回 Bukkit 接口。
 
@@ -43,24 +53,33 @@
 打进 jar，运行时只查表。查不到时依次回退到「去掉 modid 的键」「Bukkit 实体类型名」。
 
 例如 SpecialMobs 的 `SpecialMobs.HungryZombie` 没有单独汉化，会回退到 Bukkit 类型 `ZOMBIE` → 「僵尸」；
-有汉化的则显示「饥饿僵尸」。
+有汉化的则显示「饥饿僵尸」。1.4.1 实测中 `火焰僵尸`、`瘟疫僵尸`、`野蛮僵尸`、`巨大僵尸`
+这些 SpecialMobs 变体都能正确显示并清理。
 
 ### 清理简报
 
-清理完成后全服播报，鼠标悬停在任意位置可看到按类别分组的明细：
+清理完成后全服播报，鼠标悬停看按类别分组的「中文名: 数量」明细：
 
 ```
-[NeverLag] 本次清理了 168 只生物 · 敌对 168 · [明细]
+[大肥猫] 这次成功吃了 226 只怪，嗝~ · 敌对 12 · 友好 214 （命名的 2 只太硬，卡牙，这次没吃）（5 只 Boss，打不过） [明细]
     悬停 →
-    清理完成，共 168 只
+    清理完成，共 226 只
 
-    敌对 168 只
-      野蛮僵尸: 42
-      巨大僵尸: 34
-      饥饿僵尸: 30
-      ...
-    耗时 127 毫秒
+    友好 214 只
+      牛: 180
+      羊: 22
+      村民: 8
+      …
+
+    没吃的：
+      命名牌 2 只：太硬，卡牙
+      Boss 5 只：打不过
+    耗时 186 毫秒
 ```
+
+「没吃的」会随数量变化，没有就不显示；文案可在 `mobclear.yml` 用
+`NamedMessage` / `TamedMessage` / `BossMessage` 改写，置空字符串即关闭。
+悬浮明细每类最多列 30 种，多出来的写成「…另有 N 种」，避免上万只生物时把聊天包撑大。
 
 游戏内用 `/tellraw` 发 JSON（1.7.10 原生支持 `hoverEvent`），控制台同时打印纯文本明细。
 不自己拼数据包，是为了避开 Spigot / Cauldron 之间数据包类名不一致的问题。
@@ -93,28 +112,34 @@ Tab 补全可列出 `all`、`now` 与实体键。玩家需 OP；控制台/RCON �
 
 判定与查表这类真正耗时的部分不占主线程；删除被切成小批，不会出现一次性删几千只导致的卡顿。
 
+清理范围是**当前已加载区块内的实体**。没有玩家的区块本来就不 tick，实体也不会造成负担，
+等玩家过去、区块加载后下一轮会照常清掉。
+
 ### 配置 `mobclear.yml`
 
 ```yaml
-Enable: true          # 定时清理总开关；开启后旧 ClearEntity 定时任务自动让位
-Delay: 1800           # 清理间隔（秒）
+Enable: true            # 定时清理总开关；开启后旧 ClearEntity 定时任务自动让位
+Delay: 1800             # 清理间隔（秒）= 半小时，到点就清，没有数量阈值
 Clean:
-  Hostile: true       # 敌对
-  Friendly: false     # 友好
-  Neutral: false      # 中立
-BatchSize: 200        # 每 tick 最多删除多少只
-TimeBudgetMs: 4       # 每 tick 最多占用多少毫秒
-ExtraHostile: []      # 额外归类，填 EntityList 键
+  Hostile: true         # 敌对
+  Friendly: true        # 友好（动物、鱿鱼、蝙蝠、村民）
+  Neutral: true         # 中立（铁傀儡等）
+BatchSize: 200          # 每 tick 最多删除多少只
+TimeBudgetMs: 4         # 每 tick 最多占用多少毫秒
+ExtraHostile: []        # 额外归类，填 EntityList 键
 ExtraFriendly: []
 ExtraNeutral: []
-Exclude:              # 永不清理
-  - Villager
-Boss:                 # IBossDisplayData 之外还要保护的 Boss
+Exclude: []             # 永不清理，默认不排除（村民也会被清）
+Boss:                   # IBossDisplayData 之外还要保护的 Boss
   - TwilightForest.Hydra
   - ...
 Broadcast: true
-Debug: false          # 把简报 JSON 打进控制台
+Debug: false            # 把简报 JSON 打进控制台
+ClearNamedHostile: true # 敌对生物带名字也清；改成 false 则命名僵尸也保留
 Message: '&b[NeverLag] &a本次清理了 &c%COUNT% &a只生物'
+NamedMessage: '&7（命名的 &f%NAMED% &7只太硬，卡牙，这次没吃）'
+TamedMessage: '&7（&f%TAMED% &7只驯服宠物，下不去口）'
+BossMessage: '&7（&f%BOSS% &7只 Boss，打不过）'
 ```
 
 改完执行 `/neverlag reload` 生效，不用重启。
@@ -154,7 +179,7 @@ Message: '&b[NeverLag] &a本次清理了 &c%COUNT% &a只生物'
 # SERVER_DIR=... JAVAC=... JAR=... ./build.sh
 ```
 
-产物为 `build/NeverLag1.4.0.jar`。
+产物为 `build/NeverLag1.4.1.jar`。
 
 重新生成中文名表（需要一份 GTNH 客户端实例）：
 
@@ -169,26 +194,26 @@ python tools/gen_mobnames.py \
 
 1. 停止服务端。
 2. 把旧 jar 移出 `plugins/` 根目录，**不要保留两份同 modId 的 jar**。
-3. 放入 `build/NeverLag1.4.0.jar`，启动服务端；首次启动会生成 `plugins/NeverLag/mobclear.yml`。
-4. 日志应出现 `Enabling NeverLag v1.4.0`、`已加载 987 条生物中文名`、`生物清理已开启`。
+3. 放入 `build/NeverLag1.4.1.jar`，启动服务端；首次启动会生成 `plugins/NeverLag/mobclear.yml`。
+4. 日志应出现 `Enabling NeverLag v1.4.1`、`已加载 987 条生物中文名`、`生物清理已开启，每 1800 秒一次`。
 5. 旧 `config.yml` 里的 `ClearEntity.Enable: true` 会在新清理开启时自动让位，
    日志会打印「旧的 ClearEntity 定时任务不再注册」。
 
 ## 验证结果
 
 环境：本机测试服 `gtnh1/server2`（Crucible 1.7.10 + Java 26，GTNH 2.9.0），RCON 端口 25576，
-探针插件 `test/NLProbe.java` 用于统计与核对实体。
+探针插件统计实体类型与自定义名。
 
 | 场景 | 结果 |
 |---|---|
-| `clear all`（含 Mod 生物） | 30 只：敌对 7（精灵 2、岩精强盗 2、饥饿僵尸 1、腐化触手怪 1、僵尸 1）、友好 22（牛 21、鸡 1）、中立 1（铁傀儡），耗时 129 ms |
-| 命名牌生物 | 命名僵尸、命名羊全部保留 |
-| Boss | 暮色九头蛇（`TwilightForest.Hydra`）保留；`clear TwilightForest.Hydra` 返回 0 只 |
-| 村民 | `Exclude` 默认命中，保留 |
-| `clear zombie` | 4 只：饥饿僵尸 2、瘟疫僵尸 1、僵尸村民 1（Bukkit 类型同为 ZOMBIE 的 Mod 变体一并清理） |
-| `clear 牛` | 2 只，中文名匹配生效 |
-| `clear now` | 按配置类别清理 1 只 |
-| 压测（BatchSize=20） | 160 只分 8 tick 清完，总耗时 557 ms；期间 RCON 往返 52–63 ms，无 `Can't keep up` 日志 |
+| 混合实体 `clear all` | 22 个活体实体中清掉 15 只：敌对 7（火焰僵尸 2、僵尸 2、瘟疫僵尸 1、巨大僵尸 1、野蛮僵尸 1）、友好 8（牛 3、村民 3、羊 2），耗时 126 ms |
+| 命名牌生物 | 命名牛 `NameCow`、命名羊保留；命名僵尸 `PlayerPet` 按 `ClearNamedHostile: true` 被清 |
+| Boss | 5 只暮色九头蛇全部保留，播报「5 只 Boss，打不过」 |
+| 画 / 展示框 | `summon Painting`、`summon ItemFrame` 生成后不受影响（非 LivingEntity，扫描列表里根本没有） |
+| 村民 | `Exclude: []` 下正常清理，3 只全清 |
+| 中文名 | SpecialMobs 变体显示「火焰僵尸 / 瘟疫僵尸 / 野蛮僵尸 / 巨大僵尸」，Mod 生物无需单独适配 |
+| 规模测试 | 一次 `clear all` 清 226 只，总耗时 186 ms；期间 RCON 往返最小 1 / 平均 7 / 最大 63 ms，无 `Can't keep up` 日志 |
+| 重复执行 | 再执行一次得到「没有符合条件的生物，命名牌保留 2 只，Boss 保留 5 只」 |
 
 启动与清理期间未出现与 NeverLag 相关的异常。
 
@@ -196,7 +221,7 @@ python tools/gen_mobnames.py \
 
 | 分支 | 内容 |
 |---|---|
-| `legacy-1.3.0`（默认） | 1.3.0 反编译还原源码 + 1.3.1 修复 + 1.4.0 生物清理 |
+| `legacy-1.3.0`（默认） | 1.3.0 反编译还原源码 + 1.3.1 修复 + 1.4.x 生物清理 |
 | `master` | fork 自带的上游 2.0-SNAPSHOT 重写版源码，未改动 |
 
 ## 来源与许可

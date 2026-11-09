@@ -17,12 +17,19 @@ import org.bukkit.plugin.Plugin;
  */
 public final class ChatReport {
 
+    /**
+     * 悬浮明细里每个类别最多列多少种。
+     * 上万个生物时名字条目可能上百，聊天包不能无限撑大。
+     */
+    private static final int MAX_NAMES_PER_TYPE = 30;
+
     private ChatReport() {
     }
 
-    public static void broadcast(Plugin plugin, Map<MobType, Map<String, Integer>> counts, int total, long elapsedMs) {
-        String hover = buildHover(counts, total, elapsedMs);
-        String json = buildJson(hover, counts, total);
+    public static void broadcast(Plugin plugin, Map<MobType, Map<String, Integer>> counts, int total, long elapsedMs,
+            int named, int tamed, int boss) {
+        String hover = buildHover(counts, total, elapsedMs, named, tamed, boss);
+        String json = buildJson(hover, counts, total, named, tamed, boss);
         if (MobClearConfig.debug) {
             plugin.getLogger().info("[NeverLag] 简报 JSON: " + json);
         }
@@ -38,15 +45,16 @@ public final class ChatReport {
             }
         }
         if (!delivered) {
-            Bukkit.broadcastMessage(plainLine(counts, total));
+            Bukkit.broadcastMessage(plainLine(counts, total, named, tamed, boss));
         }
-        Bukkit.getConsoleSender().sendMessage(plainLine(counts, total));
+        Bukkit.getConsoleSender().sendMessage(plainLine(counts, total, named, tamed, boss));
         for (String line : hover.split("\n")) {
             Bukkit.getConsoleSender().sendMessage("    " + line);
         }
     }
 
-    public static String plainLine(Map<MobType, Map<String, Integer>> counts, int total) {
+    public static String plainLine(Map<MobType, Map<String, Integer>> counts, int total,
+            int named, int tamed, int boss) {
         StringBuilder sb = new StringBuilder();
         sb.append(ChatColor.stripColor(color(MobClearConfig.message)).replace("%COUNT%", String.valueOf(total)));
         for (MobType type : MobType.values()) {
@@ -55,7 +63,20 @@ public final class ChatReport {
                 sb.append(" · ").append(type.label()).append(' ').append(c);
             }
         }
+        appendKeep(sb, MobClearConfig.namedMessage, "%NAMED%", named);
+        appendKeep(sb, MobClearConfig.tamedMessage, "%TAMED%", tamed);
+        appendKeep(sb, MobClearConfig.bossMessage, "%BOSS%", boss);
         return sb.toString();
+    }
+
+    /**
+     * 追加「没吃的」说明，模板为空或数量为 0 时不显示。
+     */
+    private static void appendKeep(StringBuilder sb, String template, String token, int count) {
+        if (count <= 0 || template == null || template.trim().length() == 0) {
+            return;
+        }
+        sb.append(' ').append(ChatColor.stripColor(color(template)).replace(token, String.valueOf(count)));
     }
 
     private static String color(String text) {
@@ -74,7 +95,8 @@ public final class ChatReport {
         return total;
     }
 
-    private static String buildJson(String hover, Map<MobType, Map<String, Integer>> counts, int total) {
+    private static String buildJson(String hover, Map<MobType, Map<String, Integer>> counts, int total,
+            int named, int tamed, int boss) {
         List<String> parts = new ArrayList<String>();
         String message = color(MobClearConfig.message).replace("%COUNT%", String.valueOf(total));
         for (String[] part : splitLegacy(message)) {
@@ -86,6 +108,9 @@ public final class ChatReport {
                 parts.add(component(" · " + type.label() + " " + count, type.color(), hover));
             }
         }
+        addKeep(parts, hover, MobClearConfig.namedMessage, "%NAMED%", named);
+        addKeep(parts, hover, MobClearConfig.tamedMessage, "%TAMED%", tamed);
+        addKeep(parts, hover, MobClearConfig.bossMessage, "%BOSS%", boss);
         parts.add(component(" §8[明细]", null, hover));
 
         StringBuilder sb = new StringBuilder(256);
@@ -98,6 +123,18 @@ public final class ChatReport {
         }
         sb.append("]}");
         return sb.toString();
+    }
+
+    private static void addKeep(List<String> parts, String hover, String template, String token, int count) {
+        if (count <= 0 || template == null || template.trim().length() == 0) {
+            return;
+        }
+        String text = color(template).replace(token, String.valueOf(count));
+        boolean first = true;
+        for (String[] part : splitLegacy(text)) {
+            parts.add(component((first ? " " : "") + part[1], part[0], hover));
+            first = false;
+        }
     }
 
     private static String component(String text, String color, String hover) {
@@ -169,7 +206,8 @@ public final class ChatReport {
         }
     }
 
-    private static String buildHover(Map<MobType, Map<String, Integer>> counts, int total, long elapsedMs) {
+    private static String buildHover(Map<MobType, Map<String, Integer>> counts, int total, long elapsedMs,
+            int named, int tamed, int boss) {
         StringBuilder sb = new StringBuilder();
         sb.append("清理完成，共 ").append(total).append(" 只\n");
         for (MobType type : MobType.values()) {
@@ -185,8 +223,26 @@ public final class ChatReport {
                     return b.getValue().compareTo(a.getValue());
                 }
             });
+            int shown = 0;
             for (Map.Entry<String, Integer> entry : entries) {
+                if (shown >= MAX_NAMES_PER_TYPE) {
+                    sb.append("  …另有 ").append(entries.size() - shown).append(" 种\n");
+                    break;
+                }
                 sb.append("  ").append(entry.getKey()).append(": ").append(entry.getValue()).append('\n');
+                shown++;
+            }
+        }
+        if (named > 0 || tamed > 0 || boss > 0) {
+            sb.append("\n没吃的：\n");
+            if (named > 0) {
+                sb.append("  命名牌 ").append(named).append(" 只：太硬，卡牙\n");
+            }
+            if (tamed > 0) {
+                sb.append("  驯服宠物 ").append(tamed).append(" 只：下不去口\n");
+            }
+            if (boss > 0) {
+                sb.append("  Boss ").append(boss).append(" 只：打不过\n");
             }
         }
         sb.append("耗时 ").append(elapsedMs).append(" 毫秒");
