@@ -1,10 +1,27 @@
-# NeverLag 1.4.1（Minecraft 1.7.10 / GTNH 版）
+# NeverLag 1.4.2（Minecraft 1.7.10 / GTNH 版）
 
 > 本仓库是 [jiongjionger/NeverLag](https://github.com/jiongjionger/NeverLag) 的 fork。
 > **默认分支 `legacy-1.3.0` 基于测试服实际运行的 1.3.0 成品 jar 反编译还原，再叠加本仓库的修复与新功能，
 > 面向 GTNH（Minecraft 1.7.10 + Crucible）服务端。**
 > 上游 `master` 的 2.0-SNAPSHOT 重写版源码完整保留在 `master` 分支；它的 cleaner / fixer
 > 尚未接入 `onEnable()`，也没有 1.7.10 的 NMS 分支，不可直接部署。
+
+## 1.4.2：修复游戏内不播报
+
+1.4.0 / 1.4.1 里简报只写进了控制台，玩家聊天框什么都看不到。原因是 **1.7.10 的 `/tellraw`
+  只接受单个玩家名，不认 `@a`**——`tellraw @a <json>` 会报「无法找到该玩家」，而指令系统
+   仍然返回「已执行」，所以连纯文本兜底都不会触发。
+
+现在的做法：
+
+- 取在线玩家列表，**逐个玩家**发 `tellraw <玩家名> <json>`；
+- 发送前先用服务端自己的 `ChatSerializer` 验一遍 JSON，解析失败就直接改发纯文本，
+  保证「至少有一行播报」；
+- 单个玩家发送异常时，只把这一名玩家降级成纯文本，不影响其他人；
+- 控制台日志新增 `[NeverLag] 简报播报：N 名玩家`，一眼能看出播报到没到人。
+
+诊断建议：`mobclear.yml` 里 `Debug: true` 会额外打出简报 JSON、`Broadcast` 关闭提示和
+「没有玩家在线」提示。
 
 ## 1.4.1：默认「除 Boss 和命名过的，全清」
 

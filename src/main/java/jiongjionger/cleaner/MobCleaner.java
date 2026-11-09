@@ -275,7 +275,13 @@ public class MobCleaner {
         plugin.getLogger().info("[NeverLag] 清理完成：" + total + " 只，耗时 " + elapsed + " 毫秒"
                 + keepSummary(scan));
         if (total > 0) {
-            ChatReport.broadcast(plugin, counts, total, elapsed, scan.named, scan.tamed, scan.boss);
+            try {
+                ChatReport.broadcast(plugin, counts, total, elapsed, scan.named, scan.tamed, scan.boss);
+            }
+            catch (Throwable t) {
+                // 播报出问题（例如换服后聊天组件类缺失）也不能挡住执行者这条回执
+                plugin.getLogger().warning("[NeverLag] 播报失败: " + t);
+            }
         }
         if (sender != null) {
             sender.sendMessage("§a[NeverLag] 清理完成，共 " + total + " 只，耗时 " + elapsed + " 毫秒");

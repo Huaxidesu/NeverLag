@@ -1,5 +1,8 @@
 package jiongjionger.cleaner;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -7,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 /**
@@ -14,6 +18,9 @@ import org.bukkit.plugin.Plugin;
  *
  * 走 /tellraw 而不是自己拼数据包，是为了不碰各服务端实现不一样的数据包类名；
  * tellraw 在 1.7.10 就支持 hoverEvent，JSON 由服务端自己解析。
+ *
+ * 注意：1.7.10 的 tellraw 只认单个玩家名，写 {@code @a} 会报「无法找到该玩家」
+ * （而且指令系统仍然返回成功，不会触发纯文本兜底），所以这里逐个玩家单独发。
  */
 public final class ChatReport {
 
@@ -29,27 +36,86 @@ public final class ChatReport {
     public static void broadcast(Plugin plugin, Map<MobType, Map<String, Integer>> counts, int total, long elapsedMs,
             int named, int tamed, int boss) {
         String hover = buildHover(counts, total, elapsedMs, named, tamed, boss);
+        String plain = plainLine(counts, total, named, tamed, boss);
         String json = buildJson(hover, counts, total, named, tamed, boss);
         if (MobClearConfig.debug) {
             plugin.getLogger().info("[NeverLag] 简报 JSON: " + json);
         }
-        if (!MobClearConfig.broadcast) {
-            return;
-        }
-        boolean delivered = false;
-        if (!Bukkit.getOnlinePlayers().isEmpty()) {
-            try {
-                delivered = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "tellraw @a " + json);
-            } catch (Throwable t) {
-                plugin.getLogger().warning("[NeverLag] 发送清理简报失败，退回纯文本: " + t);
-            }
-        }
-        if (!delivered) {
-            Bukkit.broadcastMessage(plainLine(counts, total, named, tamed, boss));
-        }
-        Bukkit.getConsoleSender().sendMessage(plainLine(counts, total, named, tamed, boss));
+        // 控制台永远打纯文本，附带完整明细（游戏内悬浮用的是同一份文字）
+        Bukkit.getConsoleSender().sendMessage(plain);
         for (String line : hover.split("\n")) {
             Bukkit.getConsoleSender().sendMessage("    " + line);
+        }
+        if (!MobClearConfig.broadcast) {
+            if (MobClearConfig.debug) {
+                plugin.getLogger().info("[NeverLag] Broadcast 为 false，跳过游戏内播报");
+            }
+            return;
+        }
+        List<Player> players = new ArrayList<Player>(Bukkit.getOnlinePlayers());
+        if (players.isEmpty()) {
+            if (MobClearConfig.debug) {
+                plugin.getLogger().info("[NeverLag] 没有玩家在线，简报只写控制台");
+            }
+            return;
+        }
+        if (!jsonParsable(plugin, json)) {
+            // JSON 本身有问题就别浪费一轮 tellraw，直接退回纯文本
+            for (Player player : players) {
+                player.sendMessage(plain);
+            }
+            return;
+        }
+        int sent = 0;
+        int failed = 0;
+        for (Player player : players) {
+            if (tellraw(player, json)) {
+                sent++;
+            } else {
+                failed++;
+                player.sendMessage(plain);
+            }
+        }
+        plugin.getLogger().info("[NeverLag] 简报播报：" + sent + " 名玩家"
+                + (failed > 0 ? "，" + failed + " 名退回纯文本" : ""));
+    }
+
+    /**
+     * 1.7.10 的 tellraw 只接受单个玩家名，必须逐个发；指令出错时 Bukkit 仍可能返回 true，
+     * 所以这里只把抛异常当作失败。
+     */
+    private static boolean tellraw(Player player, String json) {
+        try {
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "tellraw " + player.getName() + " " + json);
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * 用服务端自己的解析器（net.minecraft.util.ChatSerializer）验一遍 JSON。
+     * 类名对不上、反射不可用时一律放行，不因为校验不了就不播报。
+     */
+    private static boolean jsonParsable(Plugin plugin, String json) {
+        try {
+            Class<?> serializer = Class.forName("net.minecraft.util.ChatSerializer");
+            for (Method method : serializer.getMethods()) {
+                Class<?>[] params = method.getParameterTypes();
+                if (!Modifier.isStatic(method.getModifiers()) || params.length != 1
+                        || params[0] != String.class || method.getReturnType() == void.class) {
+                    continue;
+                }
+                method.setAccessible(true);
+                method.invoke(null, json);
+                return true;
+            }
+            return true;
+        } catch (InvocationTargetException e) {
+            plugin.getLogger().warning("[NeverLag] 简报 JSON 解析失败，改发纯文本: " + e.getCause());
+            return false;
+        } catch (Throwable t) {
+            return true;
         }
     }
 
@@ -111,7 +177,9 @@ public final class ChatReport {
         addKeep(parts, hover, MobClearConfig.namedMessage, "%NAMED%", named);
         addKeep(parts, hover, MobClearConfig.tamedMessage, "%TAMED%", tamed);
         addKeep(parts, hover, MobClearConfig.bossMessage, "%BOSS%", boss);
-        parts.add(component(" §8[明细]", null, hover));
+        for (String[] part : splitLegacy(color(" &8[明细]"))) {
+            parts.add(component(part[1], part[0], hover));
+        }
 
         StringBuilder sb = new StringBuilder(256);
         sb.append("{\"text\":\"\",\"extra\":[");
