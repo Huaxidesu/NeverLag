@@ -19,8 +19,7 @@ WarningAt:
   - 10
 
 # 提醒文案，%TIME% 会被替换成剩余秒数。
-# 文案风格与 ClearItem 的「肥猫的大胃袋」保持一致：以「开饭」「吃掉」代替「清理」。
-WarningMessage: '&c[肥猫的大胃袋] &6大胃袋将会在 &e%TIME%秒 &6后开饭，刷怪场里的怪物请及时离开!'
+WarningMessage: '&c[NeverLag] &6生物清理将在 &e%TIME% &6秒后开始'
 
 # 定时清理的类别。默认三类全清，只保留 Boss、命名牌生物、驯服宠物。
 # 手动 /neverlag clear all 同样三类全清，不受这里的开关限制。
@@ -45,12 +44,13 @@ ExtraHostile: []
 ExtraFriendly: []
 ExtraNeutral: []
 
-# 永不清理的实体，默认不排除任何生物（村民、铁傀儡都会被清）。
-# 想保住某类生物就往这里加键，例如：
+# 永不清理的实体，出厂即排除神秘时代的傀儡与旅行箱（玩家的生产设施）。
+# 想再保住其他生物就往这里加实体键，例如：
 #   - Villager            村民
-#   - Thaumcraft.Golem    神秘傀儡（玩家自动化常用，默认不排除）
 # 画、展示框、拴绳结、掉落物、经验球不属于生物，永远不会被这个功能碰到。
-Exclude: []
+Exclude:
+  - Thaumcraft.Golem            # 神秘时代傀儡
+  - Thaumcraft.TravelingTrunk   # 神秘时代旅行箱（与傀儡同基类）
 
 # 额外保护名单。Boss 有三条自动判定（下面这个列表只是补充，不写也认）：
 #   1. 实现 IBossDisplayData —— 1.7.10 的头顶血条只认这个接口，屏幕上方有血条的一定命中
@@ -130,11 +130,17 @@ Debug: false
 # 所以默认关闭。确实想让自动起名的怪物被清，再改成 true。
 ClearNamedHostile: false
 
-# 播报文案，%COUNT% 会被替换成吃掉的总数；支持 & 颜色代码
-# 鼠标悬浮在播报上可看「中文名: 数量」明细
-Message: '&3&l[肥猫的大胃袋] &a本次共吃掉了 &e%COUNT% &a只生物&7'
+# 精英怪（InfernalMobs）是否照常清理。默认 true。
+# 精英怪的名字由模组生成，不是玩家起的，按「命名保留」会被永久留下；
+# 这里按实体持久 NBT 里的 InfernalMobsMod 标记识别，命中后无视名字照常清理。
+ClearInfernal: true
 
-# 没吃的那部分，附在播报末尾，数量为 0 时不显示；置空字符串可关掉对应提示
-NamedMessage: '&7（&f%NAMED% &7只挂着名字牌，大胃袋不吃熟客）'
-TamedMessage: '&7（&f%TAMED% &7只是驯服的宠物，大胃袋下不去口）'
-BossMessage: '&7（&f%BOSS% &7只 Boss 太硬，大胃袋啃不动）'
+# 播报文案，%COUNT% 会被替换成清理总数；支持 & 颜色代码
+# 鼠标移在主消息上可看本次全部明细；移在后面三段上分别看那一类的名单
+Message: '&3&l[NeverLag] &a本次共清理了 &e%COUNT% &a只生物 &b[&e悬停查看明细&b]'
+
+# 没清理的那部分，附在播报末尾，数量为 0 时不显示；置空字符串可关掉对应提示
+# 每一段各带自己的悬浮名单（按生物中文名汇总）
+NamedMessage: '&7（&f%NAMED% &7只命名生物已保留）'
+TamedMessage: '&7（&f%TAMED% &7只驯服宠物已保留）'
+BossMessage: '&7（&f%BOSS% &7只 Boss 已保留）'

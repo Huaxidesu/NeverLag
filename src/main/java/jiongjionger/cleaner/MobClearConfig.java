@@ -38,6 +38,8 @@ public final class MobClearConfig {
     public static boolean debug = false;
     /** 敌对生物即使带自定义名也清掉（默认关：任何命名的生物都保留）。 */
     public static boolean clearNamedHostile = false;
+    /** 精英怪（InfernalMobs）按持久 NBT 识别，命中后无视自定义名照常清理。 */
+    public static boolean clearInfernal = true;
     /** 类名里带 Boss 的实体一律当 Boss 保护（防没实现血条接口的模组 Boss 被误清）。 */
     public static boolean protectBossNamed = true;
     public static String message = "&b[NeverLag]&a本次清理了 &c%COUNT% &a只生物";
@@ -113,6 +115,7 @@ public final class MobClearConfig {
         broadcast = cfg.getBoolean("Broadcast", true);
         debug = cfg.getBoolean("Debug", false);
         clearNamedHostile = cfg.getBoolean("ClearNamedHostile", false);
+        clearInfernal = cfg.getBoolean("ClearInfernal", true);
         protectBossNamed = cfg.getBoolean("ProtectBossNamed", true);
         message = cfg.getString("Message", message);
         namedMessage = cfg.getString("NamedMessage", namedMessage);

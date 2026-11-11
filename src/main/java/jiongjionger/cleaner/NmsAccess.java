@@ -48,6 +48,63 @@ public final class NmsAccess {
         }
     }
 
+    /** InfernalMobs 写在实体持久 NBT 里的键，取自 {@code InfernalMobsCore.getNBTTag()}。 */
+    private static final String INFERNAL_TAG = "InfernalMobsMod";
+
+    private static final Map<Class<?>, Method> DATA_METHODS = new ConcurrentHashMap<Class<?>, Method>();
+    private static volatile Method nbtStringMethod;
+
+    /**
+     * 取实体的持久 NBT（Forge 的 entityData）。取不到返回 null。
+     * {@code getEntityData} 是 Forge 追加的方法，不参与 SRG 重映射，因此可以按名字取。
+     */
+    private static Object entityData(Object nmsEntity) {
+        Class<?> clazz = nmsEntity.getClass();
+        Method method = DATA_METHODS.get(clazz);
+        if (method == null) {
+            try {
+                method = clazz.getMethod("getEntityData");
+                method.setAccessible(true);
+                DATA_METHODS.put(clazz, method);
+            } catch (Throwable t) {
+                return null;
+            }
+        }
+        try {
+            return method.invoke(nmsEntity);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * 判断生物是否被 InfernalMobs 判为精英怪。
+     *
+     * 这个模组不给生物写自定义名，只在持久 NBT 里记一串 modifier（键 InfernalMobsMod），
+     * 名字是客户端另画的，所以服务端只能靠这个标记识别。读不到 NBT 时一律返回 false。
+     */
+    public static boolean isInfernal(Object nmsEntity) {
+        if (nmsEntity == null) {
+            return false;
+        }
+        Object data = entityData(nmsEntity);
+        if (data == null) {
+            return false;
+        }
+        try {
+            Method method = nbtStringMethod;
+            if (method == null) {
+                method = data.getClass().getMethod("func_74779_i", String.class);
+                method.setAccessible(true);
+                nbtStringMethod = method;
+            }
+            Object value = method.invoke(data, INFERNAL_TAG);
+            return value instanceof String && ((String) value).trim().length() > 0;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     /**
      * 判断 NMS 实体是否是某个类/接口（按类名逐级比较，兼容反混淆后的包名）。
      */

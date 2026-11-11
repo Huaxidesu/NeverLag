@@ -38,17 +38,20 @@ public final class ChatReport {
     }
 
     public static void broadcast(Plugin plugin, Map<MobType, Map<String, Integer>> counts, int total, long elapsedMs,
-            int named, int tamed, int boss) {
+            int named, int tamed, int boss,
+            Map<String, Integer> namedNames, Map<String, Integer> tamedNames, Map<String, Integer> bossNames) {
         String hover = buildHover(counts, total, elapsedMs, named, tamed, boss);
         String plain = plainLine(counts, total, named, tamed, boss);
-        String json = buildJson(hover, counts, total, named, tamed, boss);
+        String json = buildJson(hover, counts, total, named, tamed, boss, namedNames, tamedNames, bossNames);
         if (MobClearConfig.debug) {
             plugin.getLogger().info("[NeverLag] 简报 JSON: " + json);
         }
-        // 控制台永远打纯文本，附带完整明细（游戏内悬浮用的是同一份文字）
+        // 控制台永远留一行纯文本摘要；逐行明细只在 Debug 打开时打，免得把后台刷爆
         Bukkit.getConsoleSender().sendMessage(plain);
-        for (String line : hover.split("\n")) {
-            Bukkit.getConsoleSender().sendMessage("    " + line);
+        if (MobClearConfig.debug) {
+            for (String line : hover.split("\n")) {
+                Bukkit.getConsoleSender().sendMessage("    " + line);
+            }
         }
         if (!MobClearConfig.broadcast) {
             if (MobClearConfig.debug) {
@@ -195,24 +198,25 @@ public final class ChatReport {
     }
 
     private static String buildJson(String hover, Map<MobType, Map<String, Integer>> counts, int total,
-            int named, int tamed, int boss) {
+            int named, int tamed, int boss,
+            Map<String, Integer> namedNames, Map<String, Integer> tamedNames, Map<String, Integer> bossNames) {
         List<String> parts = new ArrayList<String>();
         String message = color(MobClearConfig.message).replace("%COUNT%", String.valueOf(total));
         for (String[] part : splitLegacy(message)) {
             parts.add(component(part[1], part[0], hover));
         }
+        // 每个分类计数各挂自己的名单，鼠标移到「敌对」「友好」上看的就是这一类
         for (MobType type : MobType.values()) {
             int count = sum(counts, type);
             if (count > 0) {
-                parts.add(component(" · " + type.label() + " " + count, type.color(), hover));
+                parts.add(component(" · " + type.label() + " " + count, type.color(),
+                        buildListHover(type.label(), count, counts.get(type))));
             }
         }
-        addKeep(parts, hover, MobClearConfig.namedMessage, "%NAMED%", named);
-        addKeep(parts, hover, MobClearConfig.tamedMessage, "%TAMED%", tamed);
-        addKeep(parts, hover, MobClearConfig.bossMessage, "%BOSS%", boss);
-        for (String[] part : splitLegacy(color(" &8[明细]"))) {
-            parts.add(component(part[1], part[0], hover));
-        }
+        // 三段「没吃的」同理，鼠标移到哪段就看哪一类
+        addKeep(parts, buildListHover("戴着名牌", named, namedNames), MobClearConfig.namedMessage, "%NAMED%", named);
+        addKeep(parts, buildListHover("家养的", tamed, tamedNames), MobClearConfig.tamedMessage, "%TAMED%", tamed);
+        addKeep(parts, buildListHover("Boss", boss, bossNames), MobClearConfig.bossMessage, "%BOSS%", boss);
 
         StringBuilder sb = new StringBuilder(256);
         sb.append("{\"text\":\"\",\"extra\":[");
@@ -224,6 +228,44 @@ public final class ChatReport {
         }
         sb.append("]}");
         return sb.toString();
+    }
+
+    /**
+     * 一份「标题 + 名单」的悬浮文本，供分类计数和三段「没吃的」共用。
+     * 没有名单时只给一行标题，避免悬停框空着。
+     */
+    private static String buildListHover(String title, int count, Map<String, Integer> names) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(title).append(' ').append(count).append(" 只");
+        if (names == null || names.isEmpty()) {
+            return sb.toString();
+        }
+        List<Map.Entry<String, Integer>> entries = sorted(names);
+        int shown = 0;
+        for (Map.Entry<String, Integer> entry : entries) {
+            if (shown >= MAX_NAMES_PER_TYPE) {
+                sb.append('\n').append("  …另有 ").append(entries.size() - shown).append(" 种");
+                return sb.toString();
+            }
+            sb.append('\n').append("  ").append(entry.getKey()).append(": ").append(entry.getValue());
+            shown++;
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 按数量从多到少排。数量相同时按名字排，避免每次播报顺序乱跳。
+     */
+    private static List<Map.Entry<String, Integer>> sorted(Map<String, Integer> map) {
+        List<Map.Entry<String, Integer>> entries = new ArrayList<Map.Entry<String, Integer>>(map.entrySet());
+        Collections.sort(entries, new Comparator<Map.Entry<String, Integer>>() {
+            @Override
+            public int compare(Map.Entry<String, Integer> a, Map.Entry<String, Integer> b) {
+                int c = b.getValue().compareTo(a.getValue());
+                return c != 0 ? c : a.getKey().compareTo(b.getKey());
+            }
+        });
+        return entries;
     }
 
     private static void addKeep(List<String> parts, String hover, String template, String token, int count) {
@@ -317,13 +359,7 @@ public final class ChatReport {
                 continue;
             }
             sb.append('\n').append(type.label()).append(' ').append(sum(counts, type)).append(" 只\n");
-            List<Map.Entry<String, Integer>> entries = new ArrayList<Map.Entry<String, Integer>>(map.entrySet());
-            Collections.sort(entries, new Comparator<Map.Entry<String, Integer>>() {
-                @Override
-                public int compare(Map.Entry<String, Integer> a, Map.Entry<String, Integer> b) {
-                    return b.getValue().compareTo(a.getValue());
-                }
-            });
+            List<Map.Entry<String, Integer>> entries = sorted(map);
             int shown = 0;
             for (Map.Entry<String, Integer> entry : entries) {
                 if (shown >= MAX_NAMES_PER_TYPE) {
@@ -335,15 +371,16 @@ public final class ChatReport {
             }
         }
         if (named > 0 || tamed > 0 || boss > 0) {
+            // 只给汇总，具体名单挂在消息后面三段各自的悬浮里
             sb.append("\n没吃的：\n");
             if (named > 0) {
-                sb.append("  命名牌 ").append(named).append(" 只：太硬，卡牙\n");
+                sb.append("  戴着名牌 ").append(named).append(" 只\n");
             }
             if (tamed > 0) {
-                sb.append("  驯服宠物 ").append(tamed).append(" 只：下不去口\n");
+                sb.append("  家养的 ").append(tamed).append(" 只\n");
             }
             if (boss > 0) {
-                sb.append("  Boss ").append(boss).append(" 只：打不过\n");
+                sb.append("  Boss ").append(boss).append(" 只\n");
             }
         }
         sb.append("耗时 ").append(elapsedMs).append(" 毫秒");

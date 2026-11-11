@@ -82,6 +82,29 @@ public enum MobType {
     }
 
     /**
+     * 神秘时代的傀儡与旅行箱。这两类实体是玩家的生产设施，被清理会造成实际损失，
+     * 因此与配置无关地固定保留；按基类判断，附属模组继承同一基类的实体一并覆盖。
+     */
+    public static boolean isThaumcraftGolem(LivingEntity entity) {
+        return isThaumcraftGolem(NmsAccess.handle(entity));
+    }
+
+    public static boolean isThaumcraftGolem(Object handle) {
+        if (handle == null) {
+            return false;
+        }
+        return NmsAccess.isA(handle.getClass(), "thaumcraft.common.entities.golems.EntityGolemBase");
+    }
+
+    /**
+     * 精英怪：由 InfernalMobs 在持久 NBT 里打的标记识别，不看名字。
+     * 这个模组的名字在客户端现渲染，服务端读不到，只有 NBT 能可靠区分。
+     */
+    public static boolean isInfernal(LivingEntity entity) {
+        return NmsAccess.isInfernal(NmsAccess.handle(entity));
+    }
+
+    /**
      * 返回 null 表示不参与清理（Boss、非生物、判定不出类别）。
      */
     public static MobType classify(LivingEntity entity) {

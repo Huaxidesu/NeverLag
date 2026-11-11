@@ -270,7 +270,11 @@ implements Listener {
                 aCraftItemstack = Class.forName("org.bukkit.craftbukkit." + version + ".inventory.CraftItemStack");
             }
             catch (ClassNotFoundException e) {
-                e.printStackTrace();
+                // Crucible 把 ItemStack 放在 net.minecraft.item，这个探针在 1.7.10 整合服上必然失败，
+                // 属正常情况；只在 Debug 打开时打印，避免每次启动刷一段堆栈。
+                if (MobClearConfig.debug) {
+                    e.printStackTrace();
+                }
             }
             this.getServer().getPluginManager().registerEvents((Listener)this, (Plugin)this);
             this.protocolManager.addPacketListener((PacketListener)new PacketAdapter((Plugin)this, ConnectionSide.CLIENT_SIDE, ListenerPriority.NORMAL, new Integer[]{107}){
@@ -450,6 +454,22 @@ implements Listener {
         }
         if (args.length == 1 && "who".equalsIgnoreCase(args[0])) {
             this.dumpBroadcast(sender);
+            return true;
+        }
+        if (args.length == 1 && "named".equalsIgnoreCase(args[0])) {
+            if (this.mobCleaner == null) {
+                sender.sendMessage("§c[NeverLag] 生物清理模块未初始化");
+            } else {
+                this.mobCleaner.dumpNamed(sender);
+            }
+            return true;
+        }
+        if (args.length == 1 && "status".equalsIgnoreCase(args[0])) {
+            if (this.mobCleaner == null) {
+                sender.sendMessage("§c[NeverLag] 生物清理模块未初始化");
+            } else {
+                this.mobCleaner.dumpStatus(sender);
+            }
             return true;
         }
         if (args.length == 1 && ("bosses".equalsIgnoreCase(args[0]) || "boss".equalsIgnoreCase(args[0]))) {
