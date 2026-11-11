@@ -1,6 +1,6 @@
 name: NeverLag
 main: jiongjionger.NeverLag
-version: 1.5.1
+version: 1.5.3
 author: jiongjionger
 commands:
     NeverLag:

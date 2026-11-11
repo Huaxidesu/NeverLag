@@ -373,7 +373,9 @@ public class MobCleaner {
                 String custom = entity.getCustomName();
                 // 精英怪的名字是模组自动加的，命中后照常清理，不算「命名牌保留」
                 boolean infernal = MobClearConfig.clearInfernal && NmsAccess.isInfernal(handle);
-                if (!infernal && custom != null && custom.trim().length() > 0) {
+                // 名字里带本体种类名的（如「剧毒骷髅弓箭手」含「骷髅」）同样是模组生成
+                boolean autoNamed = MobClearConfig.clearAutoNamed && isAutoNamed(custom, key, entity);
+                if (!infernal && !autoNamed && custom != null && custom.trim().length() > 0) {
                     // SpecialMobs 这类模组会给怪物自动起名，敌对生物可以按配置忽略名字照清
                     if (!(type == MobType.HOSTILE && MobClearConfig.clearNamedHostile)) {
                         named++;
@@ -406,6 +408,64 @@ public class MobCleaner {
     /**
      * 分类悬浮里显示的名字：优先中文名，取不到就用实体类名。
      */
+    /** 基础种类关键词：类名片段 → 中文种类名。变种怪、精英怪套的名字里通常带这一层。 */
+    private static final String[][] BASE_WORDS = {
+            {"Skeleton", "骷髅"}, {"Zombie", "僵尸"}, {"Spider", "蜘蛛"}, {"Creeper", "苦力怕"},
+            {"Enderman", "末影人"}, {"Witch", "女巫"}, {"Blaze", "烈焰人"}, {"Slime", "史莱姆"},
+            {"Ghast", "恶魂"}, {"Silverfish", "蠹虫"}, {"Guardian", "守卫者"}, {"Wither", "凋灵"},
+    };
+
+    /**
+     * 判断自定义名是不是模组自动生成的。
+     *
+     * 三条依据，命中任意一条即认为不是玩家起的名：
+     *   1. 与实体英文名完全相同；
+     *   2. 与本类型的中文名相同或包含它；
+     *   3. 类继承链属于某个基础种类（僵尸 / 骷髅 / 蜘蛛…），且名字里带这个种类词。
+     * 第 3 条是关键：SpecialMobs 这类变种的名字是「无敌的僵尸」「剧毒骷髅」，
+     * 而它自己的类型名可能是「钓鱼僵尸」「喷火骷髅」，只比类型名永远匹配不上。
+     * 玩家起的名字（旺财、小白、咪咪）不含种类词，因此不受影响。
+     */
+    private static boolean isAutoNamed(String custom, String key, LivingEntity entity) {
+        if (custom == null) {
+            return false;
+        }
+        String name = custom.trim();
+        if (name.length() == 0) {
+            return false;
+        }
+        String english = entity.getType().getName();
+        if (english != null && english.length() > 0 && name.equalsIgnoreCase(english)) {
+            return true;
+        }
+        String chinese = MobNames.resolve(key, english);
+        if (chinese != null) {
+            String zh = chinese.trim();
+            // 过短的种类名（「牛」「羊」）只做完全相同比较，免得误伤玩家起的名字
+            if (name.equals(zh) || (zh.length() >= 2 && name.contains(zh))) {
+                return true;
+            }
+        }
+        String chain = classChain(entity.getClass());
+        for (String[] pair : BASE_WORDS) {
+            if (chain.indexOf(pair[0]) >= 0 && name.contains(pair[1])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 拼出「自己 + 各级父类」的类名串，用于判断基础种类（最多十层）。 */
+    private static String classChain(Class<?> clazz) {
+        StringBuilder sb = new StringBuilder(160);
+        Class<?> current = clazz;
+        for (int i = 0; i < 10 && current != null && current != Object.class; i++) {
+            sb.append(current.getSimpleName()).append('|');
+            current = current.getSuperclass();
+        }
+        return sb.toString();
+    }
+
     private static String labelOf(String key, LivingEntity entity) {
         String zh = MobNames.resolve(key, entity.getType().getName());
         return zh == null || zh.trim().length() == 0 ? entity.getType().getName() : zh;
