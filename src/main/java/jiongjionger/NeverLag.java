@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.logging.Level;
 import jiongjionger.cleaner.MobClearConfig;
 import jiongjionger.cleaner.MobCleaner;
+import jiongjionger.cleaner.AutoNames;
 import jiongjionger.cleaner.MobNames;
 import jiongjionger.common.MonitorInfoBean;
 import jiongjionger.common.MonitorServiceImpl;
@@ -170,6 +171,7 @@ implements Listener {
     public void onEnable() {
         this.LoadConfig();
         MobNames.load(this);
+        AutoNames.load(this);
         this.mobCleaner = new MobCleaner(this);
         this.mobCleaner.reload();
         Bukkit.getPluginManager().registerEvents((Listener)this, (Plugin)this);

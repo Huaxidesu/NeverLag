@@ -374,7 +374,7 @@ public class MobCleaner {
                 // 精英怪的名字是模组自动加的，命中后照常清理，不算「命名牌保留」
                 boolean infernal = MobClearConfig.clearInfernal && NmsAccess.isInfernal(handle);
                 // 名字里带本体种类名的（如「剧毒骷髅弓箭手」含「骷髅」）同样是模组生成
-                boolean autoNamed = MobClearConfig.clearAutoNamed && isAutoNamed(custom, key, entity);
+                boolean autoNamed = MobClearConfig.clearAutoNamed && isAutoNamed(custom, key, entity, type);
                 if (!infernal && !autoNamed && custom != null && custom.trim().length() > 0) {
                     // SpecialMobs 这类模组会给怪物自动起名，敌对生物可以按配置忽略名字照清
                     if (!(type == MobType.HOSTILE && MobClearConfig.clearNamedHostile)) {
@@ -426,13 +426,18 @@ public class MobCleaner {
      * 而它自己的类型名可能是「钓鱼僵尸」「喷火骷髅」，只比类型名永远匹配不上。
      * 玩家起的名字（旺财、小白、咪咪）不含种类词，因此不受影响。
      */
-    private static boolean isAutoNamed(String custom, String key, LivingEntity entity) {
+    private static boolean isAutoNamed(String custom, String key, LivingEntity entity, MobType type) {
         if (custom == null) {
             return false;
         }
         String name = custom.trim();
         if (name.length() == 0) {
             return false;
+        }
+        // 精英怪的前缀 / 后缀只对敌对生物生效：这类词表里有「凤凰」「巫师」，
+        // 玩家完全可能拿来给狼、猫起名，套到友好生物上会误删。
+        if (type == MobType.HOSTILE && AutoNames.matches(name)) {
+            return true;
         }
         String english = entity.getType().getName();
         if (english != null && english.length() > 0 && name.equalsIgnoreCase(english)) {
