@@ -3,12 +3,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SERVER_DIR="${SERVER_DIR:-D:/Game/Minecraft/Server/gtnh1/server2}"
+SERVER_DIR="${SERVER_DIR:-D:/Game/Minecraft/Server/gtnh1/server}"
 JAVAC="${JAVAC:-D:/Library/DevelopmentKit/Java/Zulu/zulu8/bin/javac.exe}"
 JAR="${JAR:-D:/Library/DevelopmentKit/Java/Zulu/zulu8/bin/jar.exe}"
 CRUCIBLE="${CRUCIBLE:-$SERVER_DIR/Crucible.jar}"
 PROTOCOLLIB="${PROTOCOLLIB:-$SERVER_DIR/plugins/ProtocolLib.jar}"
-VERSION="1.5.4"
+VERSION="1.5.5"
 OUT="build"
 
 for f in "$JAVAC" "$JAR" "$CRUCIBLE" "$PROTOCOLLIB"; do

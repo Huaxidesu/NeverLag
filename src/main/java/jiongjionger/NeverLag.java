@@ -45,9 +45,11 @@ import jiongjionger.listener.CheckRedstone;
 import jiongjionger.listener.FixPluginBug;
 import jiongjionger.listener.MobFarmLimiter;
 import jiongjionger.listener.MobLimiter;
+import jiongjionger.listener.NaturalSpawnBlocker;
 import jiongjionger.listener.NoBonemealCheat;
 import jiongjionger.listener.NoSpawnChunk;
 import jiongjionger.listener.ProtectFarm;
+import jiongjionger.listener.SpawnBlockConfig;
 import jiongjionger.listener.SpawnRate;
 import jiongjionger.task.ClearEntity;
 import jiongjionger.task.ClearItem;
@@ -155,6 +157,7 @@ implements Listener {
     public static String m_anti_bigshop;
     public static String m_anti_crashsign;
     private MobCleaner mobCleaner;
+    private NaturalSpawnBlocker naturalSpawnBlocker;
 
     static {
         m_redstone = "";
@@ -174,6 +177,7 @@ implements Listener {
         AutoNames.load(this);
         this.mobCleaner = new MobCleaner(this);
         this.mobCleaner.reload();
+        this.naturalSpawnBlocker = new NaturalSpawnBlocker(this);
         Bukkit.getPluginManager().registerEvents((Listener)this, (Plugin)this);
         intversion = Integer.parseInt(Bukkit.getServer().getBukkitVersion().split("-")[0].replace(".", ""));
         if (IsAntiBot.booleanValue()) {
@@ -408,6 +412,10 @@ implements Listener {
         m_anti_bigshop = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("FixQuickShop.Message"));
         m_anti_crashsign = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("AntiCrashSign.Message"));
         MobClearConfig.load(this);
+        SpawnBlockConfig.load(this);
+        if (this.naturalSpawnBlocker != null) {
+            this.naturalSpawnBlocker.clearCache();
+        }
     }
 
     @EventHandler

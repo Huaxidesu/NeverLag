@@ -1,0 +1,45 @@
+# NeverLag 生物自然生成拦截与数量限制配置（1.5.5 起启用）
+#
+# 仅拦截指定原因（默认 NATURAL、CHUNK_GEN）的生物生成，
+# 不影响玩家召唤法术、刷怪蛋（怪物蛋）、刷怪笼、繁殖等其他生成途径。
+# 修改后执行 /neverlag reload 即可生效，无需重启服务端。
+
+# 是否开启本模块（同时控制 Mobs 禁止生成与 Limits 数量限制）
+Enable: true
+
+# 调试日志：开启后每次拦截或限流都会在控制台打印生物键名、中文名与生成原因
+Debug: false
+
+# 需要拦截/限流的生成原因（对应 Bukkit CreatureSpawnEvent.SpawnReason，不区分大小写）
+# 默认仅针对自然刷怪与新区块生成，放行 DEFAULT、CUSTOM、SPAWNER_EGG、SPAWNER、BREEDING 等
+Reasons:
+  - NATURAL
+  - CHUNK_GEN
+
+# 禁止自然生成的生物列表（不区分大小写），支持以下写法：
+#   - 类别关键词：WaterMob（所有水生生物，含鱿鱼及模组水生生物）、Ambient（所有环境生物，含蝙蝠及模组蝙蝠类）
+#   - 中文名：如 妖精、鱿鱼、蝙蝠、精灵（按 mobnames_zh_cn.txt 匹配）
+#   - EntityList 键名：如 Squid、Bat、BiomesOPlenty.Pixie、Thaumcraft.Wisp
+#   - Bukkit EntityType 名称：如 SQUID、BAT
+#   - NMS 类名（简单类名或完整类名）：如 EntitySquid、EntityBat
+Mobs:
+  - WaterMob
+  - Ambient
+
+# 限制特定生物的自然生成数量（不区分大小写，键名写法与 Mobs 相同）
+# 当对应范围内存活数量达到或超过上限时，拦截后续自然生成（不影响召唤法术、刷怪蛋等）
+# 示例：
+# Limits:
+#   妖精: 15
+#   Thaumcraft.Wisp: 20
+Limits: {}
+
+# 数量限制的统计范围：
+#   WORLD  - 按生物所在世界分别统计（默认）
+#   SERVER - 全服所有世界合并统计
+#   CHUNK  - 按所在区块统计
+LimitScope: WORLD
+
+# 数量统计缓存时间（毫秒，默认 2000 毫秒 = 2 秒），避免频繁遍历世界实体影响 TPS
+# 放行自然生成时会自动递增缓存计数，防止同批刷怪超出上限
+LimitCacheMs: 2000
