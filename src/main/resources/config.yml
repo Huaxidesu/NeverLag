@@ -145,6 +145,19 @@ RedStone:
     ChunkLimit: 720
     #线缆被没收时的公告消息内容
     Message: '&b[服务器娘]&a发现&c高频&aProjectRed 线缆，系统已自动清理，请不要&c恶意&a使用高频红石，否则可能被系统&c自动封号！&c位置为：%Location%， 附近玩家： %Player%'
+  #ProjectRed 逻辑门检测
+  #门在每次输出变化时也会向周围发邻居更新，Timer / Sequencer / Counter 等自激门
+  #可以制造与线缆同等量级的高频。门也是正常的红石电路元件，阀值需要给得比线缆宽松，
+  #默认关闭，确认服务器确有门电路高频问题后再开启。
+  Gate:
+    #是否检测 ProjectRed 逻辑门
+    Enable: false
+    #单个坐标在一个检测周期内的信号变化次数阀值
+    Limit: 600
+    #单个区块在一个检测周期内的信号变化次数阀值，0 表示只按单坐标判定
+    ChunkLimit: 1800
+    #逻辑门被没收时的公告消息内容
+    Message: '&b[服务器娘]&a发现&c高频&aProjectRed 逻辑门，系统已自动清理，请不要&c恶意&a使用高频红石，否则可能被系统&c自动封号！&c位置为：%Location%， 附近玩家： %Player%'
   #红石被没收后在该位置生成一次爆炸
   Explosion:
     #是否在没收位置生成爆炸

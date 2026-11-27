@@ -45,6 +45,10 @@ implements Listener {
         "mrtjp.projectred.transmission.WirePart",
         "mrtjp.projectred.transmission.FramedWirePart"
     };
+    /** ProjectRed 逻辑门。门在每次输出变化时也会向周围发邻居更新，同样可以制造高频。 */
+    private static final String[] GATE_CLASS_NAMES = {
+        "mrtjp.projectred.integration.GatePart"
+    };
     private final NeverLag plugin;
     /** 原版红石的计数，键为方块坐标。 */
     private final HashMap<Location, Integer> cache = new HashMap<Location, Integer>();
@@ -54,12 +58,19 @@ implements Listener {
     private final HashMap<String, Integer> chunkCache = new HashMap<String, Integer>();
     /** 区块内的代表坐标，合计超限但逐个坐标都未超限时用其定位。 */
     private final HashMap<String, Location> chunkSample = new HashMap<String, Location>();
+    /** ProjectRed 逻辑门所在方块坐标的计数。 */
+    private final HashMap<Location, Integer> gateCache = new HashMap<Location, Integer>();
+    /** 按区块合并的逻辑门计数，键为 世界:区块X:区块Z。 */
+    private final HashMap<String, Integer> gateChunkCache = new HashMap<String, Integer>();
+    /** 逻辑门的区块代表坐标。 */
+    private final HashMap<String, Location> gateChunkSample = new HashMap<String, Location>();
     /** 本轮检测周期内已生成的爆炸次数，用于限制连续爆炸。 */
     private int explosionCount;
 
     private final Class<?> tileClass;
     private final Class<?> partClass;
     private final List<Class<?>> wireClasses = new ArrayList<Class<?>>();
+    private final List<Class<?>> gateClasses = new ArrayList<Class<?>>();
     private final int proxyBlockId;
     private final Method tileEntityAt;
     private final Method remPart;
@@ -86,12 +97,25 @@ implements Listener {
                 this.wireClasses.add(wireClass);
             }
         }
+        for (int i = 0; i < GATE_CLASS_NAMES.length; ++i) {
+            Class<?> gateClass = resolveClass(GATE_CLASS_NAMES[i]);
+            if (gateClass != null) {
+                this.gateClasses.add(gateClass);
+            }
+        }
         if (!NeverLag.ProjectRedEnable.booleanValue()) {
             plg.getLogger().info("[NeverLag] ProjectRed 线缆高频检测未启用");
         } else if (this.proxyBlockId > 0 && !this.wireClasses.isEmpty() && this.remPart != null) {
             plg.getLogger().info("[NeverLag] 已启用 ProjectRed 线缆高频检测，多方块代理方块 ID " + this.proxyBlockId);
         } else {
             plg.getLogger().info("[NeverLag] 未找到 ProjectRed Transmission 或 ForgeMultipart，线缆高频检测不生效");
+        }
+        if (!NeverLag.GateEnable.booleanValue()) {
+            plg.getLogger().info("[NeverLag] ProjectRed 逻辑门高频检测未启用");
+        } else if (this.proxyBlockId > 0 && !this.gateClasses.isEmpty() && this.remPart != null) {
+            plg.getLogger().info("[NeverLag] 已启用 ProjectRed 逻辑门高频检测，多方块代理方块 ID " + this.proxyBlockId);
+        } else {
+            plg.getLogger().info("[NeverLag] 未找到 ProjectRed 逻辑门或 ForgeMultipart，逻辑门高频检测不生效");
         }
     }
 
@@ -108,27 +132,47 @@ implements Listener {
      */
     @EventHandler(priority=EventPriority.LOWEST, ignoreCancelled=false)
     public void onBlockPhysics(BlockPhysicsEvent e) {
-        if (this.proxyBlockId <= 0 || !NeverLag.ProjectRedEnable.booleanValue()) {
+        if (this.proxyBlockId <= 0) {
+            return;
+        }
+        boolean detectWire = NeverLag.ProjectRedEnable.booleanValue();
+        boolean detectGate = NeverLag.GateEnable.booleanValue();
+        if (!detectWire && !detectGate) {
             return;
         }
         if (e.getChangedTypeId() != this.proxyBlockId) {
             return;
         }
-        Location tileLoc = this.findWireTile(e.getBlock());
-        if (tileLoc == null) {
-            return;
+        Block source = e.getBlock();
+        if (detectWire) {
+            Location tileLoc = this.findPartTile(source, this.wireClasses);
+            if (tileLoc != null) {
+                bump(this.partCache, tileLoc);
+                String key = chunkKey(tileLoc);
+                bump(this.chunkCache, key);
+                if (!this.chunkSample.containsKey(key)) {
+                    this.chunkSample.put(key, tileLoc);
+                }
+            }
         }
-        bump(this.partCache, tileLoc);
-        String key = chunkKey(tileLoc);
-        bump(this.chunkCache, key);
-        if (!this.chunkSample.containsKey(key)) {
-            this.chunkSample.put(key, tileLoc);
+        if (detectGate) {
+            Location gateLoc = this.findPartTile(source, this.gateClasses);
+            if (gateLoc != null) {
+                bump(this.gateCache, gateLoc);
+                String key = chunkKey(gateLoc);
+                bump(this.gateChunkCache, key);
+                if (!this.gateChunkSample.containsKey(key)) {
+                    this.gateChunkSample.put(key, gateLoc);
+                }
+            }
         }
     }
 
     public void redstone_run() {
         this.explosionCount = 0;
         ArrayList<Location> targets = new ArrayList<Location>();
+        ArrayList<Location> wireTargets = new ArrayList<Location>();
+        ArrayList<Location> gateTargets = new ArrayList<Location>();
         if (!this.cache.isEmpty()) {
             for (Map.Entry<Location, Integer> entry : this.cache.entrySet()) {
                 if (entry.getValue() >= NeverLag.RedstoneLimit) {
@@ -138,19 +182,31 @@ implements Listener {
             this.cache.clear();
         }
         if (!this.partCache.isEmpty()) {
-            this.collectWireTargets(targets);
+            this.collectTargets(this.partCache, this.chunkCache, this.chunkSample, NeverLag.ProjectRedLimit, NeverLag.ProjectRedChunkLimit, wireTargets);
             this.partCache.clear();
             this.chunkCache.clear();
             this.chunkSample.clear();
         }
+        if (!this.gateCache.isEmpty()) {
+            this.collectTargets(this.gateCache, this.gateChunkCache, this.gateChunkSample, NeverLag.GateLimit, NeverLag.GateChunkLimit, gateTargets);
+            this.gateCache.clear();
+            this.gateChunkCache.clear();
+            this.gateChunkSample.clear();
+        }
+        targets.addAll(wireTargets);
+        targets.addAll(gateTargets);
         if (targets.isEmpty()) {
             return;
         }
-        for (Location loc : targets) {
-            Bukkit.getScheduler().runTaskLater(this.plugin, new restone_drop(loc), 2L);
+        for (Location loc : wireTargets) {
+            Bukkit.getScheduler().runTaskLater(this.plugin, new restone_drop(loc, false), 2L);
+        }
+        for (Location loc : gateTargets) {
+            Bukkit.getScheduler().runTaskLater(this.plugin, new restone_drop(loc, true), 2L);
         }
         if (NeverLag.RedStoneMessage.booleanValue()) {
-            broadcast(targets.get(0));
+            // 同一周期内可能同时命中线缆与逻辑门，公告按优先命中线缆处理
+            broadcast(wireTargets.isEmpty() ? gateTargets.get(0) : wireTargets.get(0), wireTargets.isEmpty());
         }
     }
 
@@ -158,10 +214,8 @@ implements Listener {
      * 收集超限的线缆坐标。先按单个坐标判定，再按区块合计判定：大范围线缆网络会把事件
      * 分散到大量坐标上，单坐标计数可能始终低于阀值。
      */
-    private void collectWireTargets(List<Location> targets) {
-        int tileLimit = NeverLag.ProjectRedLimit;
-        int chunkLimit = NeverLag.ProjectRedChunkLimit;
-        for (Map.Entry<Location, Integer> entry : this.partCache.entrySet()) {
+    private void collectTargets(HashMap<Location, Integer> tileMap, HashMap<String, Integer> chunkMap, HashMap<String, Location> sampleMap, int tileLimit, int chunkLimit, List<Location> targets) {
+        for (Map.Entry<Location, Integer> entry : tileMap.entrySet()) {
             if (entry.getValue() >= tileLimit && !targets.contains(entry.getKey())) {
                 targets.add(entry.getKey());
             }
@@ -169,13 +223,13 @@ implements Listener {
         if (chunkLimit <= 0) {
             return;
         }
-        for (Map.Entry<String, Integer> entry : this.chunkCache.entrySet()) {
+        for (Map.Entry<String, Integer> entry : chunkMap.entrySet()) {
             if (entry.getValue() < chunkLimit) {
                 continue;
             }
-            Location hottest = this.hottestTile(entry.getKey());
+            Location hottest = this.hottestTile(tileMap, entry.getKey());
             if (hottest == null) {
-                hottest = this.chunkSample.get(entry.getKey());
+                hottest = sampleMap.get(entry.getKey());
             }
             if (hottest != null && !targets.contains(hottest)) {
                 targets.add(hottest);
@@ -183,11 +237,11 @@ implements Listener {
         }
     }
 
-    /** 取指定区块内计数最高的线缆坐标。 */
-    private Location hottestTile(String key) {
+    /** 取指定区块内计数最高的部件坐标。 */
+    private Location hottestTile(HashMap<Location, Integer> tileMap, String key) {
         Location hottest = null;
         int max = 0;
-        for (Map.Entry<Location, Integer> entry : this.partCache.entrySet()) {
+        for (Map.Entry<Location, Integer> entry : tileMap.entrySet()) {
             Location loc = entry.getKey();
             if (!key.equals(chunkKey(loc))) {
                 continue;
@@ -200,8 +254,9 @@ implements Listener {
         return hottest;
     }
 
-    private Location findWireTile(Block source) {
-        Location found = this.wireTileAt(source);
+    /** 在触发点自身与六个邻面内定位承载指定类型部件的多方块方块。 */
+    private Location findPartTile(Block source, List<Class<?>> partClasses) {
+        Location found = this.partTileAt(source, partClasses);
         if (found != null) {
             return found;
         }
@@ -212,17 +267,17 @@ implements Listener {
         int x = source.getX();
         int y = source.getY();
         int z = source.getZ();
-        Location hit = this.wireTileAt(world.getBlockAt(x + 1, y, z));
-        if (hit == null) hit = this.wireTileAt(world.getBlockAt(x - 1, y, z));
-        if (hit == null) hit = this.wireTileAt(world.getBlockAt(x, y + 1, z));
-        if (hit == null) hit = this.wireTileAt(world.getBlockAt(x, y - 1, z));
-        if (hit == null) hit = this.wireTileAt(world.getBlockAt(x, y, z + 1));
-        if (hit == null) hit = this.wireTileAt(world.getBlockAt(x, y, z - 1));
+        Location hit = this.partTileAt(world.getBlockAt(x + 1, y, z), partClasses);
+        if (hit == null) hit = this.partTileAt(world.getBlockAt(x - 1, y, z), partClasses);
+        if (hit == null) hit = this.partTileAt(world.getBlockAt(x, y + 1, z), partClasses);
+        if (hit == null) hit = this.partTileAt(world.getBlockAt(x, y - 1, z), partClasses);
+        if (hit == null) hit = this.partTileAt(world.getBlockAt(x, y, z + 1), partClasses);
+        if (hit == null) hit = this.partTileAt(world.getBlockAt(x, y, z - 1), partClasses);
         return hit;
     }
 
-    /** 判断该方块是否为承载 ProjectRed 线缆的多方块方块，是则返回其坐标。 */
-    private Location wireTileAt(Block block) {
+    /** 判断该方块是否为承载指定类型部件的多方块方块，是则返回其坐标。 */
+    private Location partTileAt(Block block, List<Class<?>> partClasses) {
         if (block == null || block.getTypeId() != this.proxyBlockId) {
             return null;
         }
@@ -235,7 +290,7 @@ implements Listener {
             return null;
         }
         for (Object part : parts) {
-            if (this.isWire(part)) {
+            if (this.isPart(part, partClasses)) {
                 return block.getLocation();
             }
         }
@@ -267,12 +322,12 @@ implements Listener {
         return null;
     }
 
-    private boolean isWire(Object part) {
+    private boolean isPart(Object part, List<Class<?>> partClasses) {
         if (part == null) {
             return false;
         }
-        for (Class<?> wireClass : this.wireClasses) {
-            if (wireClass.isInstance(part)) {
+        for (Class<?> partClass1 : partClasses) {
+            if (partClass1.isInstance(part)) {
                 return true;
             }
         }
@@ -280,10 +335,10 @@ implements Listener {
     }
 
     /**
-     * 移除该坐标上的全部 ProjectRed 线缆。部件被全部移除时多方块方块会自行变为空气。
-     * 返回移除的部件数量，0 表示该坐标已不存在线缆。
+     * 移除该坐标上属于指定类型的全部部件。部件被全部移除时多方块方块会自行变为空气。
+     * 返回移除的部件数量，0 表示该坐标已不存在目标部件。
      */
-    private int removeWires(Location loc) {
+    private int removeParts(Location loc, List<Class<?>> partClasses) {
         if (this.remPart == null) {
             return 0;
         }
@@ -298,7 +353,7 @@ implements Listener {
         }
         ArrayList<Object> targets = new ArrayList<Object>();
         for (Object part : parts) {
-            if (this.isWire(part)) {
+            if (this.isPart(part, partClasses)) {
                 targets.add(part);
             }
         }
@@ -345,7 +400,7 @@ implements Listener {
         this.plugin.getLogger().fine("[NeverLag] 已在 " + formatLocation(loc) + " 生成爆炸，威力 " + power);
     }
 
-    private void broadcast(Location location) {
+    private void broadcast(Location location, boolean gate) {
         String nameList = "";
         int count = 0;
         Entity[] entities = location.getChunk().getEntities();
@@ -361,17 +416,12 @@ implements Listener {
             nameList = nameList.isEmpty() ? player.getName() : nameList + ", " + player.getName();
             ++count;
         }
-        String message = isWireTile(location) ? NeverLag.m_redstone_pr : NeverLag.m_redstone;
+        String message = gate ? NeverLag.m_redstone_gate : NeverLag.m_redstone_pr;
         message = message.replace("%Location%", formatLocation(location)).replace("%Player%", nameList);
         if (NeverLag.RedStoneMessage.booleanValue()) {
             Bukkit.getServer().broadcastMessage(message);
         }
         this.plugin.getLogger().info("[NeverLag] 广播：" + message);
-    }
-
-    /** 判断该坐标承载的是否为 ProjectRed 线缆，用于选择公告文案。 */
-    private boolean isWireTile(Location loc) {
-        return this.wireTileAt(loc.getBlock()) != null;
     }
 
     private static String formatLocation(Location loc) {
@@ -453,8 +503,11 @@ implements Listener {
     implements Runnable {
         private final Location loc;
 
-        public restone_drop(Location loc) {
+        private final boolean gate;
+
+        public restone_drop(Location loc, boolean gate) {
             this.loc = loc;
+            this.gate = gate;
         }
 
         @Override
@@ -471,11 +524,11 @@ implements Listener {
                     CheckRedstone.this.explode(this.loc);
                     return;
                 }
-                int removed = CheckRedstone.this.removeWires(this.loc);
+                int removed = CheckRedstone.this.removeParts(this.loc, this.gate ? CheckRedstone.this.gateClasses : CheckRedstone.this.wireClasses);
                 if (removed <= 0) {
                     return;
                 }
-                CheckRedstone.this.plugin.getLogger().info("[NeverLag] 已没收 ProjectRed 线缆 " + formatLocation(this.loc) + "，数量 " + removed);
+                CheckRedstone.this.plugin.getLogger().info("[NeverLag] 已没收 ProjectRed " + (this.gate ? "逻辑门" : "线缆") + " " + formatLocation(this.loc) + "，数量 " + removed);
                 CheckRedstone.this.explode(this.loc);
             }
             catch (Throwable throwable) {

@@ -118,6 +118,12 @@ implements Listener {
     public static Boolean RedStoneExplosionBreakBlocks;
     /** 单个检测周期内最多生成的爆炸次数，0 表示不限制。 */
     public static int RedStoneExplosionMaxPerRun;
+    /** ProjectRed 逻辑门高频检测开关，默认关闭。 */
+    public static Boolean GateEnable;
+    /** 单坐标在检测周期内容忍的逻辑门信号变化次数。 */
+    public static int GateLimit;
+    /** 单区块在检测周期内容忍的逻辑门信号变化次数，0 表示只按单坐标判定。 */
+    public static int GateChunkLimit;
     public static Boolean IsNoSpawnChunk;
     public static Boolean IsProtectFarm;
     public static Boolean IsAntiBot;
@@ -166,6 +172,8 @@ implements Listener {
     public static String m_redstone;
     /** ProjectRed 线缆被没收时的公告文案。 */
     public static String m_redstone_pr;
+    /** ProjectRed 逻辑门被没收时的公告文案。 */
+    public static String m_redstone_gate;
     public static String m_antibot;
     public static String m_clean_item;
     public static String m_clean_item_pre;
@@ -180,6 +188,7 @@ implements Listener {
     static {
         m_redstone = "";
         m_redstone_pr = "";
+        m_redstone_gate = "";
         m_antibot = "";
         m_clean_item = "";
         m_clean_item_pre = "";
@@ -206,7 +215,7 @@ implements Listener {
             new AntiExplode(this);
         }
         // ProjectRed 线缆检测复用同一个监听器，任一开关开启都需要注册
-        if (CheckRedStone.booleanValue() || ProjectRedEnable.booleanValue()) {
+        if (CheckRedStone.booleanValue() || ProjectRedEnable.booleanValue() || GateEnable.booleanValue()) {
             new CheckRedstone(this);
         }
         if (IsProtectFarm.booleanValue()) {
@@ -385,6 +394,9 @@ implements Listener {
         RedStoneExplosionFire = config.getBoolean("RedStone.Explosion.Fire", false);
         RedStoneExplosionBreakBlocks = config.getBoolean("RedStone.Explosion.BreakBlocks", true);
         RedStoneExplosionMaxPerRun = config.getInt("RedStone.Explosion.MaxPerRun", 3);
+        GateEnable = config.getBoolean("RedStone.Gate.Enable", false);
+        GateLimit = config.getInt("RedStone.Gate.Limit", 600);
+        GateChunkLimit = config.getInt("RedStone.Gate.ChunkLimit", 1800);
         IsNoSpawnChunk = config.getBoolean("Chunk.NoSpawnChunk");
         IsProtectFarm = config.getBoolean("ProtectFarm.Enable");
         IsAntiExplode = config.getBoolean("AntiExplode.Enable");
@@ -430,6 +442,7 @@ implements Listener {
         AntiInvEditor = config.getBoolean("AntiInvEditor.Enable");
         m_redstone = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("RedStone.Message"));
         m_redstone_pr = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("RedStone.ProjectRed.Message", config.getString("RedStone.Message")));
+        m_redstone_gate = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("RedStone.Gate.Message", config.getString("RedStone.Message")));
         m_antibot = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("AntiBot.Message"));
         m_clean_item = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("ClearItem.Message"));
         m_clean_item_pre = ChatColor.translateAlternateColorCodes((char)'&', (String)config.getString("ClearItem.PreMessage"));

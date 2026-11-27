@@ -1,4 +1,4 @@
-# NeverLag 1.6.1（Minecraft 1.7.10 / GTNH 版）
+# NeverLag 1.6.2（Minecraft 1.7.10 / GTNH 版）
 
 > 本仓库是 [jiongjionger/NeverLag](https://github.com/jiongjionger/NeverLag) 的 fork。
 > **默认分支 `legacy-1.3.0` 基于测试服实际运行的 1.3.0 成品 jar 反编译还原，再叠加本仓库的修复与新功能，
@@ -6,7 +6,7 @@
 > 上游 `master` 的 2.0-SNAPSHOT 重写版源码完整保留在 `master` 分支；它的 cleaner / fixer
 > 尚未接入 `onEnable()`，也没有 1.7.10 的 NMS 分支，不可直接部署。
 
-## 1.6.1：ProjectRed 线缆高频检测与没收爆炸
+## 1.6.2：ProjectRed 线缆与逻辑门高频检测
 
 GTNH 里有人用 ProjectRed Transmission 的线缆做高频信号卡服。原版红石检测抓不到它：
 线缆不是方块，而是 ForgeMultipart 的部件，所在方块的方块 ID 是多方块代理方块（本服为 827），
@@ -18,6 +18,11 @@ GTNH 里有人用 ProjectRed Transmission 的线缆做高频信号卡服。原�
   大范围线缆网络会把变化摊到大量坐标上，只按单坐标统计会漏检。
 - **没收**：反射 `TileMultipart.remPart(TMultiPart)` 逐个移除 `WirePart` / `FramedWirePart`；
   部件清空后代理方块自动变成空气。未安装 ProjectRed 时这一路检测自动停用，不影响原版红石。
+- **逻辑门（可选，默认关闭）**：`RedstoneGatePart.notifyExternals` 在每次输出变化时同样会对
+  周围区块发邻居更新，Timer / Sequencer / Counter / StateCell / Synchronizer 这类自激门可以
+  制造与线缆同等量级的事件量。门是正常的电路元件，因此单独一段配置 `RedStone.Gate`，
+  阀值默认放宽到 600 / 1800，并把 `Enable` 保持为 `false`，需要时再打开。
+  关闭时连统计都不做，对服务器没有额外开销。
 - **爆炸**：按 HorizonFix 的做法，没收成功后在该位置调用一次 `World.createExplosion`，
   默认威力 10.0（TNT 为 4.0）；是否引燃、是否破坏方块、单检测周期最多爆炸次数均可配置。
   插件自身发起的爆炸会置位 `CheckRedstone.pluginExplosion`，`AntiExplode` 据此放行。
@@ -35,6 +40,7 @@ GTNH 里有人用 ProjectRed Transmission 的线缆做高频信号卡服。原�
 | `AntiExplode.Enable: true` | 插件自爆仍破坏方块，未被自身拦截 |
 | 原版红石回归（限值 40） | 四节红石线在 2 tick 时钟下被清除，与 1.5.5 行为一致 |
 | 单周期多目标（四个独立单元） | 前两次生成爆炸，其余只没收不炸，日志出现「本轮爆炸次数已达上限 2」 |
+| 逻辑门检测（1.6.2） | 只做代码实现与构建验证，未在服务器实测；开关默认关闭 |
 ## 1.4.5：Boss 判定补全，命名生物一律保留
 
 ### Boss 判定从一条规则变成三条
