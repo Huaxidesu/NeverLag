@@ -341,7 +341,8 @@ implements Listener {
         finally {
             pluginExplosion = false;
         }
-        this.plugin.getLogger().info("[NeverLag] 已在 " + formatLocation(loc) + " 生成爆炸，威力 " + power);
+        // 只在 FINE 级别留痕：默认日志级别下不输出，需要排查时调高日志等级可见
+        this.plugin.getLogger().fine("[NeverLag] 已在 " + formatLocation(loc) + " 生成爆炸，威力 " + power);
     }
 
     private void broadcast(Location location) {

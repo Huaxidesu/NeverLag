@@ -1,4 +1,4 @@
-# NeverLag 1.6.0（Minecraft 1.7.10 / GTNH 版）
+# NeverLag 1.6.1（Minecraft 1.7.10 / GTNH 版）
 
 > 本仓库是 [jiongjionger/NeverLag](https://github.com/jiongjionger/NeverLag) 的 fork。
 > **默认分支 `legacy-1.3.0` 基于测试服实际运行的 1.3.0 成品 jar 反编译还原，再叠加本仓库的修复与新功能，
@@ -6,7 +6,7 @@
 > 上游 `master` 的 2.0-SNAPSHOT 重写版源码完整保留在 `master` 分支；它的 cleaner / fixer
 > 尚未接入 `onEnable()`，也没有 1.7.10 的 NMS 分支，不可直接部署。
 
-## 1.6.0：ProjectRed 线缆高频检测与没收爆炸
+## 1.6.1：ProjectRed 线缆高频检测与没收爆炸
 
 GTNH 里有人用 ProjectRed Transmission 的线缆做高频信号卡服。原版红石检测抓不到它：
 线缆不是方块，而是 ForgeMultipart 的部件，所在方块的方块 ID 是多方块代理方块（本服为 827），
@@ -19,16 +19,19 @@ GTNH 里有人用 ProjectRed Transmission 的线缆做高频信号卡服。原�
 - **没收**：反射 `TileMultipart.remPart(TMultiPart)` 逐个移除 `WirePart` / `FramedWirePart`；
   部件清空后代理方块自动变成空气。未安装 ProjectRed 时这一路检测自动停用，不影响原版红石。
 - **爆炸**：按 HorizonFix 的做法，没收成功后在该位置调用一次 `World.createExplosion`，
-  威力、是否引燃、是否破坏方块、单检测周期最多爆炸次数均可配置。
+  默认威力 10.0（TNT 为 4.0）；是否引燃、是否破坏方块、单检测周期最多爆炸次数均可配置。
   插件自身发起的爆炸会置位 `CheckRedstone.pluginExplosion`，`AntiExplode` 据此放行。
+  **爆炸不单独播报**：本服装有 ServerUtilities，爆炸对方块地形与实体伤害另有处理，
+  公告只说明线缆被清理，不额外提示发生了爆炸；生成记录仅写 FINE 级日志，默认不可见。
 
-### 实测（server2：1.6.0，端口 25599）
+### 实测（server2：1.6.1，端口 25599）
 
 | 场景 | 结果 |
 |---|---|
 | 代理方块 ID 解析 | 插件日志 827，与探针插件一致 |
-| 单条线缆 2 tick 时钟 | 10 秒窗口内出现「广播 / 已没收 / 已生成爆炸」三条记录 |
-| 爆炸破坏范围（威力 4.0） | 没收点相邻四向与正上方方块变为空气，两格外的平台仍为石头 |
+| 单条线缆 2 tick 时钟 | 10 秒窗口内出现「广播 / 已没收」两条记录，不再出现爆炸提示 |
+| 爆炸破坏范围（威力 10.0） | 没收点周围 5 格内方块变为空气，6 格外的平台仍为石头 |
+| 爆炸实体伤害（威力 10.0） | 距没收点 2 格的无 AI 僵尸当场死亡（血量 22 → 0），8 格外的僵尸仍有 21.08 |
 | `AntiExplode.Enable: true` | 插件自爆仍破坏方块，未被自身拦截 |
 | 原版红石回归（限值 40） | 四节红石线在 2 tick 时钟下被清除，与 1.5.5 行为一致 |
 | 单周期多目标（四个独立单元） | 前两次生成爆炸，其余只没收不炸，日志出现「本轮爆炸次数已达上限 2」 |
@@ -305,8 +308,8 @@ python tools/gen_mobnames.py \
 
 1. 停止服务端。
 2. 把旧 jar 移出 `plugins/` 根目录，**不要保留两份同 modId 的 jar**。
-3. 放入 `build/NeverLag1.6.0.jar`，启动服务端；首次启动会生成 `plugins/NeverLag/mobclear.yml`。
-4. 日志应出现 `Enabling NeverLag v1.6.0`、`已加载 987 条生物中文名`、`生物清理已开启，每 1200 秒一次`；
+3. 放入 `build/NeverLag1.6.1.jar`，启动服务端；首次启动会生成 `plugins/NeverLag/mobclear.yml`。
+4. 日志应出现 `Enabling NeverLag v1.6.1`、`已加载 987 条生物中文名`、`生物清理已开启，每 1200 秒一次`；
    装有 ProjectRed 时还会出现 `已启用 ProjectRed 线缆高频检测，多方块代理方块 ID <id>`。
 5. 旧 `config.yml` 里的 `ClearEntity.Enable: true` 会在新清理开启时自动让位，
    日志会打印「旧的 ClearEntity 定时任务不再注册」。

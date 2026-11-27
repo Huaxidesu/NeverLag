@@ -150,7 +150,8 @@ RedStone:
     #是否在没收位置生成爆炸
     Enable: true
     #爆炸威力，TNT 为 4.0
-    Power: 4.0
+    #本服装有 ServerUtilities，爆炸主要起伤害与警示作用，威力取 10.0
+    Power: 10.0
     #是否引燃周围方块
     Fire: false
     #是否破坏方块
