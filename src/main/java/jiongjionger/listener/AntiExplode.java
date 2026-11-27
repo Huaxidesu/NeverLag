@@ -21,7 +21,7 @@ implements Listener {
 
     @EventHandler(priority=EventPriority.HIGHEST)
     public void onHIGHESTExplosion(EntityExplodeEvent e) {
-        if (e.isCancelled()) {
+        if (e.isCancelled() || CheckRedstone.pluginExplosion) {
             return;
         }
         e.blockList().clear();
@@ -29,7 +29,7 @@ implements Listener {
 
     @EventHandler(priority=EventPriority.MONITOR)
     public void onMONITORExplosion(EntityExplodeEvent e) {
-        if (e.isCancelled()) {
+        if (e.isCancelled() || CheckRedstone.pluginExplosion) {
             return;
         }
         e.blockList().clear();

@@ -133,6 +133,31 @@ RedStone:
   IsMessage: true
   #公告消息内容
   Message: '&b[服务器娘]&a发现&c高频&a红石，系统已自动清理，请不要&c恶意&a使用高频红石，否则可能被系统&c自动封号！&c位置为：%Location%， 附近玩家： %Player%'
+  #ProjectRed Transmission 线缆检测
+  #线缆属于 ForgeMultipart 部件，不触发原版红石事件，需单独统计
+  ProjectRed:
+    #是否检测 ProjectRed 线缆
+    Enable: true
+    #单个坐标在一个检测周期内的信号变化次数阀值
+    Limit: 240
+    #单个区块在一个检测周期内的信号变化次数阀值
+    #大范围线缆网络会把变化分散到大量坐标上，按区块合计可避免漏检；0 表示只按单坐标判定
+    ChunkLimit: 720
+    #线缆被没收时的公告消息内容
+    Message: '&b[服务器娘]&a发现&c高频&aProjectRed 线缆，系统已自动清理，请不要&c恶意&a使用高频红石，否则可能被系统&c自动封号！&c位置为：%Location%， 附近玩家： %Player%'
+  #红石被没收后在该位置生成一次爆炸
+  Explosion:
+    #是否在没收位置生成爆炸
+    Enable: true
+    #爆炸威力，TNT 为 4.0
+    Power: 4.0
+    #是否引燃周围方块
+    Fire: false
+    #是否破坏方块
+    BreakBlocks: true
+    #单个检测周期内最多生成的爆炸次数，0 表示不限制
+    #一次检测可能同时没收多个坐标，限制次数可避免连续爆炸造成的卡顿
+    MaxPerRun: 3
 
 #区块类
 Chunk:

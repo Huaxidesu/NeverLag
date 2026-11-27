@@ -1,4 +1,4 @@
-# NeverLag 1.4.5（Minecraft 1.7.10 / GTNH 版）
+# NeverLag 1.6.0（Minecraft 1.7.10 / GTNH 版）
 
 > 本仓库是 [jiongjionger/NeverLag](https://github.com/jiongjionger/NeverLag) 的 fork。
 > **默认分支 `legacy-1.3.0` 基于测试服实际运行的 1.3.0 成品 jar 反编译还原，再叠加本仓库的修复与新功能，
@@ -6,6 +6,32 @@
 > 上游 `master` 的 2.0-SNAPSHOT 重写版源码完整保留在 `master` 分支；它的 cleaner / fixer
 > 尚未接入 `onEnable()`，也没有 1.7.10 的 NMS 分支，不可直接部署。
 
+## 1.6.0：ProjectRed 线缆高频检测与没收爆炸
+
+GTNH 里有人用 ProjectRed Transmission 的线缆做高频信号卡服。原版红石检测抓不到它：
+线缆不是方块，而是 ForgeMultipart 的部件，所在方块的方块 ID 是多方块代理方块（本服为 827），
+`BlockRedstoneEvent` 也不会为它触发。
+
+- **检测**：改为监听 `BlockPhysicsEvent`，用 `getChangedTypeId()` 与运行期解析出的代理方块 ID 比对，
+  命中后在触发点自身与六个邻面里定位承载线缆的 `TileMultipart`，按该坐标计一次信号变化。
+- **阀值**：单坐标阀值 `RedStone.ProjectRed.Limit` 与单区块合计阀值 `ChunkLimit` 两级判定。
+  大范围线缆网络会把变化摊到大量坐标上，只按单坐标统计会漏检。
+- **没收**：反射 `TileMultipart.remPart(TMultiPart)` 逐个移除 `WirePart` / `FramedWirePart`；
+  部件清空后代理方块自动变成空气。未安装 ProjectRed 时这一路检测自动停用，不影响原版红石。
+- **爆炸**：按 HorizonFix 的做法，没收成功后在该位置调用一次 `World.createExplosion`，
+  威力、是否引燃、是否破坏方块、单检测周期最多爆炸次数均可配置。
+  插件自身发起的爆炸会置位 `CheckRedstone.pluginExplosion`，`AntiExplode` 据此放行。
+
+### 实测（server2：1.6.0，端口 25599）
+
+| 场景 | 结果 |
+|---|---|
+| 代理方块 ID 解析 | 插件日志 827，与探针插件一致 |
+| 单条线缆 2 tick 时钟 | 10 秒窗口内出现「广播 / 已没收 / 已生成爆炸」三条记录 |
+| 爆炸破坏范围（威力 4.0） | 没收点相邻四向与正上方方块变为空气，两格外的平台仍为石头 |
+| `AntiExplode.Enable: true` | 插件自爆仍破坏方块，未被自身拦截 |
+| 原版红石回归（限值 40） | 四节红石线在 2 tick 时钟下被清除，与 1.5.5 行为一致 |
+| 单周期多目标（四个独立单元） | 前两次生成爆炸，其余只没收不炸，日志出现「本轮爆炸次数已达上限 2」 |
 ## 1.4.5：Boss 判定补全，命名生物一律保留
 
 ### Boss 判定从一条规则变成三条
@@ -279,8 +305,9 @@ python tools/gen_mobnames.py \
 
 1. 停止服务端。
 2. 把旧 jar 移出 `plugins/` 根目录，**不要保留两份同 modId 的 jar**。
-3. 放入 `build/NeverLag1.4.1.jar`，启动服务端；首次启动会生成 `plugins/NeverLag/mobclear.yml`。
-4. 日志应出现 `Enabling NeverLag v1.4.1`、`已加载 987 条生物中文名`、`生物清理已开启，每 1800 秒一次`。
+3. 放入 `build/NeverLag1.6.0.jar`，启动服务端；首次启动会生成 `plugins/NeverLag/mobclear.yml`。
+4. 日志应出现 `Enabling NeverLag v1.6.0`、`已加载 987 条生物中文名`、`生物清理已开启，每 1200 秒一次`；
+   装有 ProjectRed 时还会出现 `已启用 ProjectRed 线缆高频检测，多方块代理方块 ID <id>`。
 5. 旧 `config.yml` 里的 `ClearEntity.Enable: true` 会在新清理开启时自动让位，
    日志会打印「旧的 ClearEntity 定时任务不再注册」。
 
